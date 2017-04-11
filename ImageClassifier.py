@@ -18,26 +18,35 @@ class ImageClassifier:
     def __init__(self, data_dir='.', label_csv_file='signnames.csv'):
         self.data_dir=data_dir
         self.label_csv_file=label_csv_file
+        
         # Load data set
         train, test, valid = self.load_image_data()          
-        self.X_train, self.y_train = np.array(train['features'], dtype=np.float32), train['labels']
-        self.X_valid, self.y_valid = np.array(valid['features'], dtype=np.float32), valid['labels']
-        self.X_test,  self.y_test  = np.array( test['features'], dtype=np.float32),  test['labels']
  
-#        self.X_train, self.y_train = np.array(train['features']), train['labels']
-#        self.X_valid, self.y_valid = np.array(valid['features']), valid['labels']
-#        self.X_test,  self.y_test  = np.array( test['features']),  test['labels']
-       
         # Load Image Signs  
         self.signs = self.read_signnames()
         self.num_classes=len(self.signs)
-        self.image_shape = self.X_train[0].squeeze().shape
+
+        # Set Data
+        self.set_data(train['features'], test['features'], valid['features'],
+                      train['labels']  , test['labels'],   valid['labels'])
         self.train, self.test, self.valid = (train, test, valid) 
+        
         # print info
         self.print_data_info()
 
-        self.__data = {'train': self.train, 'test': self.test, 'valid': self.valid}
-        self.__data_types = ('train', 'test', 'valid')
+    
+    def reset_data(self):
+        # Set Data
+        self.set_data(self.train['features'], self.test['features'], self.valid['features'],
+                      self.train['labels']  , self.test['labels'],   self.valid['labels'])
+        
+    
+    def set_data(self, X_train, X_test, X_valid, y_train, y_test, y_valid):
+        self.X_train, self.y_train = np.array(X_train, dtype=np.float32), y_train
+        self.X_valid, self.y_valid = np.array(X_valid, dtype=np.float32), y_valid
+        self.X_test,  self.y_test  = np.array( X_test, dtype=np.float32), y_test
+        self.image_shape = self.X_train[0].squeeze().shape
+        
         
 
     def load_image_data(self):
@@ -118,27 +127,41 @@ class ImageClassifier:
                 op(data, i, dst=dst_buf)
 
     def preprocess_all(self, operations):
-        self.preprocess(operations, self.X_train)
-        self.preprocess(operations, self.X_test )
-        self.preprocess(operations, self.X_valid)
-        
+        self.reset_data()
+        pp_train = np.zeros_like(self.X_train)
+        pp_test  = np.zeros_like(self.X_test)
+        pp_valid = np.zeros_like(self.X_valid)
+        self.preprocess(operations, self.X_train, dst_buf=pp_train)
+        self.preprocess(operations, self.X_test , dst_buf=pp_test )
+        self.preprocess(operations, self.X_valid, dst_buf=pp_valid)
+        self.set_data(pp_train, pp_test, pp_valid, self.train['labels']  , self.test['labels'],   self.valid['labels'])
                 
-    def ZeroMeanImage(src, i, dst):  
+                
+    def ZMean(src, i, dst):  
 #        if (dst is None): dst = src
         dst[i] = src[i] - np.mean(src[i])
 
-    def NormalizeImage(src, i, dst): 
+    def Norm(src, i, dst): 
 #        if (dst is None): dst = src
         dst[i] = src[i]/255.0
 
-    def UnitVarImage(src, i, dst): 
+    def UnitVar(src, i, dst): 
 #        if (dst is None): dst = src
         dst[i] = src[i]/(np.std(src[i]))
+
+
+    def ZShift(src, i, dst): 
+#        if (dst is None): dst = src
+        dst[i] = (src[i] - 128.0)
     
     
     def shuffle_training_data(self):
         self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
         
+
+    def shuffle_test_data(self):
+        self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
+
 
 class ModelTrainer:
     
@@ -153,6 +176,55 @@ class ModelTrainer:
         F_W = tf.Variable(tf.truncated_normal(shape=(fh, fw, xc, fd), mean=mu, stddev=sigma, name=None), dtype=dtype)
         F_b = tf.Variable(np.zeros((fd, )), dtype=dtype)
         return tf.nn.conv2d(x, F_W, strides, padding) + F_b
+    
+    def addDropOut(layer, keep_prob):
+        return tf.nn.dropout(layer, keep_prob=tf.constant(value=keep_prob, dtype=tf.float32))
+    
+    def LeNetWithDropOut(x, num_outputs, mu=0.0, sigma=0.1, dropouts={0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0}):    
+        # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
+        mu = 0
+        sigma = 0.1
+        
+        Layer = 0
+        # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
+        conv1 = ModelTrainer.conv2d(x, 5, 5, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
+        # Activation.
+        relu1 = tf.nn.relu(conv1)
+        # Pooling. Input = 28x28x6. Output = 14x14x6.
+        pool1 = tf.nn.max_pool(relu1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): pool1 = ModelTrainer.addDropOut(pool1, dropouts[Layer])
+            
+        Layer = Layer + 1
+        # Layer 2: Convolutional. Output = 10x10x16.
+        conv2 = ModelTrainer.conv2d(pool1, 5, 5, 16, strides=[1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)        
+        # Activation.
+        relu2 = tf.nn.relu(conv2)        
+        # Pooling. Input = 10x10x16. Output = 5x5x16.
+        pool2 = tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): pool2 = ModelTrainer.addDropOut(pool2, dropouts[Layer])
+
+        Layer = Layer + 1
+        # TODO: Flatten. Input = 5x5x16. Output = 400.
+        fc0 = flatten(pool2)   
+        # TODO: Layer 3: Fully Connected. Input = 400. Output = 120.
+        fc1 = ModelTrainer.fully_connected(fc0, 120, mu, sigma)
+        # TODO: Activation.
+        fc1_relu = tf.nn.relu(fc1)
+        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): fc1_relu = ModelTrainer.addDropOut(fc1_relu, dropouts[Layer])
+
+
+        Layer = Layer + 1
+        # TODO: Layer 4: Fully Connected. Input = 120. Output = 84.
+        fc2 = ModelTrainer.fully_connected(fc1_relu, 84, mu, sigma)    
+        # TODO: Activation.
+        fc2_relu = tf.nn.relu(fc2)
+        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): fc2_relu = ModelTrainer.addDropOut(fc2_relu, dropouts[Layer])
+
+        Layer = Layer + 1
+        # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
+        return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
+    
+    
     
     def LeNet(x, num_outputs, mu=0.0, sigma=0.1):    
         # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
@@ -185,17 +257,17 @@ class ModelTrainer:
         return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
     
 
-    def __init__(self, data, network=LeNet, EPOCHS=10, BATCH_SIZE=128, rate=0.001):
+    def __init__(self, data, network=LeNet, network_args={}, EPOCHS=10, BATCH_SIZE=128, rate=0.001):
         # Hyper-Parameters
         self.EPOCHS = EPOCHS
         self.BATCH_SIZE = BATCH_SIZE
         self.rate = rate
-        self.initialModel(data, network)
+        self.initialModel(data, network, network_args)
         
 
-    def initialModel(self, data, network):
+    def initialModel(self, data, network, network_args={}):
         self.initialize_data_container(data)
-        self.setModelNet(network)
+        self.setModelNet(network, network_args)
         self.initTrainingPipeline()
         self.initEvalPipeline()  
     
@@ -209,12 +281,15 @@ class ModelTrainer:
         self.x, self.y, self.one_hot_y = x, y, l
         
 
-    def setModelNet(self, network):
+    def setModelNet(self, network, network_args={}):
         self.network = network
+        self.network_args = network_args
         
 
     def initTrainingPipeline(self):
-        self.logits, self.training_operation = ModelTrainer.InitTrainPipeline(self.x, self.data.num_classes, self.one_hot_y, network=self.network, rate=self.rate)        
+        self.logits, self.training_operation = ModelTrainer.InitTrainPipeline(self.x, self.data.num_classes, self.one_hot_y, 
+                                                                              network=self.network, network_args=self.network_args, 
+                                                                              rate=self.rate)        
     
     
     def initEvalPipeline(self):        
@@ -269,8 +344,8 @@ class ModelTrainer:
             if (run_incomplete): shutil.rmtree(dirname)    
 
 
-    def InitTrainPipeline(x, num_classes, one_hot_y, network=(LeNet), rate=0.001):
-        logits = network(x, num_classes)
+    def InitTrainPipeline(x, num_classes, one_hot_y, network=(LeNet), network_args={}, rate=0.001):
+        logits = network(x, num_classes, **network_args)
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=one_hot_y)
         loss_operation = tf.reduce_mean(cross_entropy)
         optimizer = tf.train.AdamOptimizer(learning_rate = rate)

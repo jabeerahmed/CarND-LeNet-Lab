@@ -5,4 +5,5 @@
 *.zip
 *.log
 *.gz
-*.pickle
+*.pickletest_results/
+test_results/
