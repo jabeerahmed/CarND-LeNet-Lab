@@ -194,7 +194,7 @@ class ModelTrainer:
         pool1 = tf.nn.max_pool(relu1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
         if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): pool1 = ModelTrainer.addDropOut(pool1, dropouts[Layer])
             
-        Layer = Layer + 1
+        Layer = 1
         # Layer 2: Convolutional. Output = 10x10x16.
         conv2 = ModelTrainer.conv2d(pool1, 5, 5, 16, strides=[1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)        
         # Activation.
@@ -203,7 +203,7 @@ class ModelTrainer:
         pool2 = tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
         if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): pool2 = ModelTrainer.addDropOut(pool2, dropouts[Layer])
 
-        Layer = Layer + 1
+        Layer = 2
         # TODO: Flatten. Input = 5x5x16. Output = 400.
         fc0 = flatten(pool2)   
         # TODO: Layer 3: Fully Connected. Input = 400. Output = 120.
@@ -213,14 +213,14 @@ class ModelTrainer:
         if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): fc1_relu = ModelTrainer.addDropOut(fc1_relu, dropouts[Layer])
 
 
-        Layer = Layer + 1
+        Layer = 3
         # TODO: Layer 4: Fully Connected. Input = 120. Output = 84.
         fc2 = ModelTrainer.fully_connected(fc1_relu, 84, mu, sigma)    
         # TODO: Activation.
         fc2_relu = tf.nn.relu(fc2)
         if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): fc2_relu = ModelTrainer.addDropOut(fc2_relu, dropouts[Layer])
 
-        Layer = Layer + 1
+        Layer = 4
         # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
         return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
     
