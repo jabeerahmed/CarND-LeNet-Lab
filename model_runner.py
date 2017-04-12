@@ -320,13 +320,13 @@ def train():
 
 
 #%%
-
-org, data = Timer.run(load)
-
+#
+#org, data = Timer.run(load)
+#
 #%%
-
-Timer.run(train)
-
+#
+#Timer.run(train)
+#
 #%%
 
     
