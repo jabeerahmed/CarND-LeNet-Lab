@@ -10,16 +10,21 @@ class Timer:
 
     def __exit__(self, *args):
         self.end = time.time()
-        self.secs = self.end - self.start
+        self.secs  = self.end - self.start
         self.msecs = self.secs * 1000  # millisecs
+        self.mins  = self.secs / 60.0
+        self.hours = self.mins / 60.0
         if self.verbose: print('elapsed time: %f ms' % self.msecs)
         
-    def printTime(self):
-        print('elapsed time: {:5.3f} secs | {:10.3f} ms'.format(self.secs, self.msecs))
-
+    def printTime(self):        
+        t, u = self.hours, 'hrs'        
+        if (self.mins <  60): t, u = self.mins, 'mins'
+        if (self.secs < 300): t, u = self.secs, 'secs'        
+        if (self.msecs<1000): t, u = self.msecs,'ms'        
+        print('elapsed time: {:5.3f} {}'.format(t, u))
 
     def run(func):
         ret = None
         with Timer() as timer: ret = func()
         timer.printTime()
-        return ret                   
+        return ret
