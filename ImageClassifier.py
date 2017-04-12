@@ -303,7 +303,7 @@ class ModelTrainer:
         
     def train(self, dirname='./', pre_ops=[]):
         
-        if (os.path.isdir(dirname) == False): os.mkdir(dirname)
+        if (os.path.isdir(dirname) == False): os.makedirs(dirname)
         dirname = Utils.find_an_empty_dir(dirname)
         os.mkdir(dirname)
         outpath = os.path.join(dirname, self.network.__name__)
