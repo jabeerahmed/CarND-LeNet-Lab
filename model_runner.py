@@ -3,7 +3,7 @@ from ImageClassifier import ImageClassifier as IC
 from ImageClassifier import ModelTrainer as MT
 import numpy as np
 import matplotlib.pyplot as plt
-
+from Timer import Timer
 import os
 
 def get_string_for_array(ar):
@@ -23,7 +23,8 @@ def printTestParam(EPOCHS, BATCH_SIZE, rate, pre_ops, save_dir='.'):
     print(" Save Dir        : " + save_dir)
     print("")    
 
-def runTest(D=IC(), EPOCHS=10, BATCH_SIZE=128, rate=0.001, pre_ops=[],network=MT.LeNet, network_args={}):
+def runTest(D=None, EPOCHS=10, BATCH_SIZE=128, rate=0.001, pre_ops=[],network=MT.LeNet, network_args={}):
+    if D is None: D = IC()
     STR="EP-{}_BS-{}_R-{}_OPS-{}-NET-{}".format(EPOCHS, BATCH_SIZE, rate, get_string_for_array(pre_ops), network.__name__)
     STR=(os.path.join('test_results',STR))
     printTestParam(EPOCHS, BATCH_SIZE, rate, pre_ops, save_dir=STR)
@@ -285,439 +286,456 @@ class DataModifier:
         
         return new_lbl, new_ims
         
-org  = IC()
-data = DataModifier(org)
-#augmentDataSet(data.train)
-#augmentDataSet(data.test)
-augmentDatasetPerspective(data.train, num_total=3000)
-#augmentDataSet(data.test)
-l,im = data.updateDataSet(org)
 
 #%%
 
-kEPOCHS, kBATCH_SIZE, kRATE, kPRE_OPS, = 'EPOCHS', 'BATCH_SIZE', 'rate', 'pre_ops'
-kNETWORK, kNETWORK_ARGS = 'network', 'network_args'
+def load():
+    org  = IC()
+    data = DataModifier(org)
+    #augmentDataSet(data.train)
+    #augmentDataSet(data.test)
+    augmentDatasetPerspective(data.train, num_total=3000)
+    #augmentDataSet(data.test)
+    l,im = data.updateDataSet(org)
+    return org, data
 
-tests  =[
-#            {kEPOCHS: 25, kBATCH_SIZE: 64, kRATE: 0.001, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {0:0.5, 1:0.5}}},
-#            {kEPOCHS: 25, kBATCH_SIZE:  64, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
-#            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5, 3:0.5}}},
-#            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
-            {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {}}}     
-        ]
+
+def train():
+
+    kEPOCHS, kBATCH_SIZE, kRATE, kPRE_OPS, = 'EPOCHS', 'BATCH_SIZE', 'rate', 'pre_ops'
+    kNETWORK, kNETWORK_ARGS = 'network', 'network_args'
+    
+    tests  =[
+    #            {kEPOCHS: 25, kBATCH_SIZE: 64, kRATE: 0.001, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {0:0.5, 1:0.5}}},
+    #            {kEPOCHS: 25, kBATCH_SIZE:  64, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
+    #            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5, 3:0.5}}},
+    #            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
+                {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {}}}     
+            ]
+    
+    
+    for p in tests:
+        p[kPRE_OPS] = [IC.ZShift]
+        Data, Trainer = runTest(D=org, **p)
 
 
-for p in tests:
-    p[kPRE_OPS] = [IC.ZShift]
-    Data, Trainer = runTest(D=org, **p)
+#%%
+org, data = Timer.run(load)
 
+#%%
+
+Timer.run(train)
+
+#%%
+
+    
 #pre_ops = [IC.NormalizeImage, IC.ZeroMeanImage, IC.UnitVarImage]
 #pre_ops=[IC.UnitVarImage]
 #pre_ops=[IC.ZeroMeanImage, IC.UnitVarImage]
 
 
-#%%
-
-plot_data(data.train, classes=get_rand(range(0,42), 5), n_per_class=30, signs=data.signs)
-
-
-
-
-
-#%%
-
-count=0
-
-
-
-src1 = np.float32([ [ 6,6],  [6, 26], [26, 6]])
-dst1 = np.float32([[13,5], [10, 25], [25, 5]])
-dst2 = np.float32([[10,3], [10, 27], [22, 8]])
-
-
-
-def translate(t=[0,0]): return np.float32([[1, 0, t[0]], [0, 1, t[1]]])
-def rotate(center, angle): return cv2.getRotationMatrix2D(center, angle, 1)
-    
-    
-    
-def warpImage(im_src, mat):
-    sz = im_src.shape
-    im_dst = np.zeros_like(im_src)
-    
-#    src = np.float32([ [5,5],  [5, 25], [25, 5]])
-#    dst = (np.random.rand(3,2) * 32).astype(np.float32)
-#    dst = np.float32([[13,3], [10, 25], [25, 5]])
-#    mat = cv2.getAffineTransform(src, dst)
-    for i in range(3):
-        if (mat.shape == (3,3)): 
-            im_dst[:, :, i] = cv2.warpPerspective(im_src[:,:,i], mat, (sz[0], sz[1]), borderMode=cv2.BORDER_REPLICATE)
-        else:
-            im_dst[:, :, i] = cv2.warpAffine(im_src[:,:,i], mat, (sz[0], sz[1]), borderMode=cv2.BORDER_REPLICATE)
-    return im_dst
-
-def plotImage(im_src, im_dst):    
-    im_comp = np.hstack((im_src, im_dst))    
-    plt.imshow(im_comp)
-    plt.show()
-    
-im = data.train[40][112]
-im_center = (im.shape[0]/2, im.shape[1]/2)
-#plotImage(im, warpImage(im, translate(t=[5, -5])))
-#plotImage(im, warpImage(im, translate(t=[5,  5])))
-#plotImage(im, warpImage(im, translate(t=[-5, 5])))
-#plotImage(im, warpImage(im, translate(t=[-5,-5])))
-#plotImage(im, warpImage(im, translate(t=[-5, 0])))
-#plotImage(im, warpImage(im, translate(t=[ 5, 0])))
-#plotImage(im, warpImage(im, translate(t=[ 0,-5])))
-#plotImage(im, warpImage(im, translate(t=[ 0, 5])))
-
-for i in [-60, -30, 30, 60]: plotImage(im, warpImage(im, rotate(im_center, i)))
-
-#%%
-
-hist = [len(data.train[i]) for i in range(len(data.train))]
-plt.plot(hist)
-
-#%%        
-        
-#    new_ims = np.int(max(0, np.floor(m_max/n)-1)*n)
-#    new_total = np.int(n + new_ims)
-#    new_delta = m_max - new_total
-#    new_hist.append(new_total)
-#    print("delta = {:5}   |   num new = {:5}   |   new total = {:5}   |   new_del = {:5}".format(delta, new_ims, new_total, new_delta))    
-
-#%%
-
-
-#%%
-
-
-#%%
-
-
-
-
-#%%
-
-#EPOCHS=25
-#BATCH_SIZE=64
-#rate=0.004
-
-#tests = [ 
-#            [25, 64, 0.002],
-#            [30, 64, 0.002],
-#            [35, 64, 0.002],
-#            [1, 64, 0.001]
-#         ]
+##%%
 #
-#for p in tests:
-#    pre_ops = [IC.Norm, IC.ZMean]
-#    Data, Trainer = runTest(EPOCHS=p[0], BATCH_SIZE=p[1], rate=p[2], pre_ops=pre_ops, network=MT.LeNetWithDropOut, network_args={'dropouts': {0: 0.5}})
-#%%
-
-
-
-
-#%%
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-a = IC()
-
-def split_data_into_classes(images, labels):
-    l_data = {i:[] for i in range(43)}
-    for idx, label in enumerate(labels): l_data[label].append(images[idx])
-    return l_data    
-    
-
-def print_data_stats(l_data, data_info, signs):
-    print("-----------------------------------------------------------------------|")
-    print("| Data : {:62.62}|".format(data_info))
-    print("|                                                                      |")
-    print("| Class |  Num Imgs  | Label                                           |")
-    print("|----------------------------------------------------------------------|")
-    for key, imgs in l_data.items():
-        print("|  {:>3d}  |  {:>6d}  |  {}".format(key, len(imgs), signs[key] ))
-        print("|----------------------------------------------------------------------|")
-
-
-train = split_data_into_classes(a.train['features'], a.train['labels'])
-valid = split_data_into_classes(a.valid['features'], a.valid['labels'])
-test  = split_data_into_classes( a.test['features'],  a.test['labels'])
-
-#print_data_stats(train, "Traing Set Only: Total Images = {}".format(len(a.X_train)))  
-#print("\n\n\n\n\n\n\n\n\n\n")  
-#print_data_stats(valid, "Validation Set Only: Total Images = {}".format(len(a.X_valid)))    
-#print("\n\n\n\n\n\n\n\n\n\n")  
-#print_data_stats(test , "Testing Set Only: Total Images = {}".format(len(a.X_test)))    
-
-
-
-#%%
-
-
-#cols = ['{}'.format(col) for col in range(1, 4)]
-#rows = ['Row {}'.format(row) for row in ['A', 'B', 'C', 'D']]
-#
-#fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 8))
-#
-#for ax, col in zip(axes[0], cols):
-#    ax.set_title(col)
-
-
-#%%
-plot_data(train, classes=range(6), n_per_class=5, signs=a.signs)
-
-#%%
-#EPOCHS=10
-#BATCH_SIZE=128
-#rate=0.001
-#pre_ops = [IC.NormalizeImage, IC.ZeroMeanImage]
-#
-#Data, Trainer = runTest(pre_ops=pre_ops)
-#
-#---------------------------------
-#      | Train  | Test   | Valid  |
-#---------------------------------
-# (#)  |  34799 |  12630 |   4410 |
-# (%)  |   1.00 |   0.36 |   0.13 |
-#---------------------------------
-#Number Classes  : 43
-#Image Dimensions: (32, 32, 3)
-#
-#Training...
-#
-#EPOCH 1 ...
-#Validation Accuracy = 0.782
-#
-#EPOCH 2 ...
-#Validation Accuracy = 0.860
-#
-#EPOCH 3 ...
-#Validation Accuracy = 0.866
-#
-#EPOCH 4 ...
-#Validation Accuracy = 0.898
-#
-#EPOCH 5 ...
-#Validation Accuracy = 0.909
-#
-#EPOCH 6 ...
-#Validation Accuracy = 0.908
-#
-#EPOCH 7 ...
-#Validation Accuracy = 0.901
-#
-#EPOCH 8 ...
-#Validation Accuracy = 0.923
-#
-#EPOCH 9 ...
-#Validation Accuracy = 0.904
-#
-#EPOCH 10 ...
-#Validation Accuracy = 0.908
-#
-#Model saved
-
-
-#%%
-#------------------------------------------
-# EPOCHS          : 10
-# BATCH_SIZE      : 128
-# Pre-process Ops : [NormalizeImage-ZeroMeanImage-UnitVarImage]
-# Save Dir        : EP-10_BS-128_R-0.001_OPS-[NormalizeImage-ZeroMeanImage-UnitVarImage]
-#
-#---------------------------------
-#      | Train  | Test   | Valid  |
-#---------------------------------
-# (#)  |  34799 |  12630 |   4410 |
-# (%)  |   1.00 |   0.36 |   0.13 |
-#---------------------------------
-#Number Classes  : 43
-#Image Dimensions: (32, 32, 3)
-#
-#Training...
-#
-#EPOCH  1 ...
-#Validation Accuracy = 0.834
-#
-#EPOCH  2 ...
-#Validation Accuracy = 0.879
-#
-#EPOCH  3 ...
-#Validation Accuracy = 0.895
-#
-#EPOCH  4 ...
-#Validation Accuracy = 0.900
-#
-#EPOCH  5 ...
-#Validation Accuracy = 0.887
-#
-#EPOCH  6 ...
-#Validation Accuracy = 0.915
-#
-#EPOCH  7 ...
-#Validation Accuracy = 0.910
-#
-#EPOCH  8 ...
-#Validation Accuracy = 0.901
-#
-#EPOCH  9 ...
-#Validation Accuracy = 0.897
-#
-#EPOCH 10 ...
-#Validation Accuracy = 0.918
-#
-#Model saved : EP-10_BS-128_R-0.001_OPS-[NormalizeImage-ZeroMeanImage-UnitVarImage]_003/LeNet
-
-#%%
-#------------------------------------------
-# EPOCHS          : 10
-# BATCH_SIZE      : 128
-# Pre-process Ops : [ZeroMeanImage]
-# Save Dir        : EP-10_BS-128_R-0.001_OPS-[ZeroMeanImage]
-#
-#---------------------------------
-#      | Train  | Test   | Valid  |
-#---------------------------------
-# (#)  |  34799 |  12630 |   4410 |
-# (%)  |   1.00 |   0.36 |   0.13 |
-#---------------------------------
-#Number Classes  : 43
-#Image Dimensions: (32, 32, 3)
-#
-#Training...
-#
-#EPOCH  1 ...
-#Validation Accuracy = 0.721
-#
-#EPOCH  2 ...
-#Validation Accuracy = 0.828
-#
-#EPOCH  3 ...
-#Validation Accuracy = 0.857
-#
-#EPOCH  4 ...
-#Validation Accuracy = 0.892
-#
-#EPOCH  5 ...
-#Validation Accuracy = 0.868
-#
-#EPOCH  6 ...
-#Validation Accuracy = 0.899
-#
-#EPOCH  7 ...
-#Validation Accuracy = 0.889
-#
-#EPOCH  8 ...
-#Validation Accuracy = 0.901
-#
-#EPOCH  9 ...
-#Validation Accuracy = 0.910
-#
-#EPOCH 10 ...
-#Validation Accuracy = 0.912
-#
-#Model saved : EP-10_BS-128_R-0.001_OPS-[ZeroMeanImage]_000/LeNet
-
-#%%
-#------------------------------------------
-# EPOCHS          : 10
-# BATCH_SIZE      : 128
-# Pre-process Ops : []
-# Save Dir        : EP-10_BS-128_R-0.001_OPS-[]
-#
-#---------------------------------
-#      | Train  | Test   | Valid  |
-#---------------------------------
-# (#)  |  34799 |  12630 |   4410 |
-# (%)  |   1.00 |   0.36 |   0.13 |
-#---------------------------------
-#Number Classes  : 43
-#Image Dimensions: (32, 32, 3)
-#
-#Training...
-#
-#EPOCH  1 ...
-#Validation Accuracy = 0.616
-#
-#EPOCH  2 ...
-#Validation Accuracy = 0.755
-#
-#EPOCH  3 ...
-#Validation Accuracy = 0.817
-#
-#EPOCH  4 ...
-#Validation Accuracy = 0.828
-#
-#EPOCH  5 ...
-#Validation Accuracy = 0.845
-#
-#EPOCH  6 ...
-#Validation Accuracy = 0.850
-#
-#EPOCH  7 ...
-#Validation Accuracy = 0.872
-#
-#EPOCH  8 ...
-#Validation Accuracy = 0.873
-#
-#EPOCH  9 ...
-#Validation Accuracy = 0.870
-#
-#EPOCH 10 ...
-#Validation Accuracy = 0.877
-#
-#Model saved : EP-10_BS-128_R-0.001_OPS-[]_000/LeNet
-
-#%%
-
-
-#Image Dimensions: (32, 32, 3)
+#plot_data(data.train, classes=get_rand(range(0,42), 5), n_per_class=30, signs=data.signs)
 #
 #
-#Class: 0 | [103  45  54  61 177]
-#Class: 1 | [1423  622 1425  811 1318]
-#Class: 2 | [1336 1193  726   19 1463]
-#Class: 3 | [ 355  800 1234  422  860]
-#Class: 4 | [1410  176 1131 1616 1030]
-
-#%%
-
-
-
-from matplotlib.colors import hsv_to_rgb
-import cv2
-
-ims = [data.train[1][811], data.train[3][422], data.train[4][1131] ]
-hsv = [cv2.cvtColor(im, cv2.COLOR_RGB2HSV) for im in ims]
-
-hsv_boost = [np.copy(h) for h in hsv]
-for i in hsv_boost: i[:,:,2]=i[:,:,2]*1
-
-ims2 = [hsv,hsv_boost]
-
-plot_grid_subplot(2, 3, lambda r,c,fig,axs: axs[r][c].imshow(((cv2.cvtColor(ims2[r][c],cv2.COLOR_HSV2RGB)))))
-
-#%%
-
-hsv_norm = [np.copy(h)/255.0 for h in hsv]
-#hsv_mean = [np.copy(h) -127.0 for h in hsv]
-
-hsv_uvar = [np.copy(h) for h in hsv_norm]
-for h in hsv_uvar:
-    h[:,:,0] /= np.max(h[:,:,0])
-    h[:,:,1] /= np.max(h[:,:,1])
-    h[:,:,2] /= np.max(h[:,:,2])
-    
-p = hsv_uvar
-plot_grid_subplot(1, 3, lambda r,c,fig,axs: axs[c].imshow( hsv_to_rgb(p[c]) ))
-plot_grid_subplot(1, 3, lambda r,c,fig,axs: axs[c].imshow( ims[c]))
-
+#
+#
+#
+##%%
+#
+#count=0
+#
+#
+#
+#src1 = np.float32([ [ 6,6],  [6, 26], [26, 6]])
+#dst1 = np.float32([[13,5], [10, 25], [25, 5]])
+#dst2 = np.float32([[10,3], [10, 27], [22, 8]])
+#
+#
+#
+#def translate(t=[0,0]): return np.float32([[1, 0, t[0]], [0, 1, t[1]]])
+#def rotate(center, angle): return cv2.getRotationMatrix2D(center, angle, 1)
+#    
+#    
+#    
+#def warpImage(im_src, mat):
+#    sz = im_src.shape
+#    im_dst = np.zeros_like(im_src)
+#    
+##    src = np.float32([ [5,5],  [5, 25], [25, 5]])
+##    dst = (np.random.rand(3,2) * 32).astype(np.float32)
+##    dst = np.float32([[13,3], [10, 25], [25, 5]])
+##    mat = cv2.getAffineTransform(src, dst)
+#    for i in range(3):
+#        if (mat.shape == (3,3)): 
+#            im_dst[:, :, i] = cv2.warpPerspective(im_src[:,:,i], mat, (sz[0], sz[1]), borderMode=cv2.BORDER_REPLICATE)
+#        else:
+#            im_dst[:, :, i] = cv2.warpAffine(im_src[:,:,i], mat, (sz[0], sz[1]), borderMode=cv2.BORDER_REPLICATE)
+#    return im_dst
+#
+#def plotImage(im_src, im_dst):    
+#    im_comp = np.hstack((im_src, im_dst))    
+#    plt.imshow(im_comp)
+#    plt.show()
+#    
+#im = data.train[40][112]
+#im_center = (im.shape[0]/2, im.shape[1]/2)
+##plotImage(im, warpImage(im, translate(t=[5, -5])))
+##plotImage(im, warpImage(im, translate(t=[5,  5])))
+##plotImage(im, warpImage(im, translate(t=[-5, 5])))
+##plotImage(im, warpImage(im, translate(t=[-5,-5])))
+##plotImage(im, warpImage(im, translate(t=[-5, 0])))
+##plotImage(im, warpImage(im, translate(t=[ 5, 0])))
+##plotImage(im, warpImage(im, translate(t=[ 0,-5])))
+##plotImage(im, warpImage(im, translate(t=[ 0, 5])))
+#
+#for i in [-60, -30, 30, 60]: plotImage(im, warpImage(im, rotate(im_center, i)))
+#
+##%%
+#
+#hist = [len(data.train[i]) for i in range(len(data.train))]
+#plt.plot(hist)
+#
+##%%        
+#        
+##    new_ims = np.int(max(0, np.floor(m_max/n)-1)*n)
+##    new_total = np.int(n + new_ims)
+##    new_delta = m_max - new_total
+##    new_hist.append(new_total)
+##    print("delta = {:5}   |   num new = {:5}   |   new total = {:5}   |   new_del = {:5}".format(delta, new_ims, new_total, new_delta))    
+#
+##%%
+#
+#
+##%%
+#
+#
+##%%
+#
+#
+#
+#
+##%%
+#
+##EPOCHS=25
+##BATCH_SIZE=64
+##rate=0.004
+#
+##tests = [ 
+##            [25, 64, 0.002],
+##            [30, 64, 0.002],
+##            [35, 64, 0.002],
+##            [1, 64, 0.001]
+##         ]
+##
+##for p in tests:
+##    pre_ops = [IC.Norm, IC.ZMean]
+##    Data, Trainer = runTest(EPOCHS=p[0], BATCH_SIZE=p[1], rate=p[2], pre_ops=pre_ops, network=MT.LeNetWithDropOut, network_args={'dropouts': {0: 0.5}})
+##%%
+#
+#
+#
+#
+##%%
+#
+#import numpy as np
+#import matplotlib.pyplot as plt
+#
+#a = IC()
+#
+#def split_data_into_classes(images, labels):
+#    l_data = {i:[] for i in range(43)}
+#    for idx, label in enumerate(labels): l_data[label].append(images[idx])
+#    return l_data    
+#    
+#
+#def print_data_stats(l_data, data_info, signs):
+#    print("-----------------------------------------------------------------------|")
+#    print("| Data : {:62.62}|".format(data_info))
+#    print("|                                                                      |")
+#    print("| Class |  Num Imgs  | Label                                           |")
+#    print("|----------------------------------------------------------------------|")
+#    for key, imgs in l_data.items():
+#        print("|  {:>3d}  |  {:>6d}  |  {}".format(key, len(imgs), signs[key] ))
+#        print("|----------------------------------------------------------------------|")
+#
+#
+#train = split_data_into_classes(a.train['features'], a.train['labels'])
+#valid = split_data_into_classes(a.valid['features'], a.valid['labels'])
+#test  = split_data_into_classes( a.test['features'],  a.test['labels'])
+#
+##print_data_stats(train, "Traing Set Only: Total Images = {}".format(len(a.X_train)))  
+##print("\n\n\n\n\n\n\n\n\n\n")  
+##print_data_stats(valid, "Validation Set Only: Total Images = {}".format(len(a.X_valid)))    
+##print("\n\n\n\n\n\n\n\n\n\n")  
+##print_data_stats(test , "Testing Set Only: Total Images = {}".format(len(a.X_test)))    
+#
+#
+#
+##%%
+#
+#
+##cols = ['{}'.format(col) for col in range(1, 4)]
+##rows = ['Row {}'.format(row) for row in ['A', 'B', 'C', 'D']]
+##
+##fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 8))
+##
+##for ax, col in zip(axes[0], cols):
+##    ax.set_title(col)
+#
+#
+##%%
+#plot_data(train, classes=range(6), n_per_class=5, signs=a.signs)
+#
+##%%
+##EPOCHS=10
+##BATCH_SIZE=128
+##rate=0.001
+##pre_ops = [IC.NormalizeImage, IC.ZeroMeanImage]
+##
+##Data, Trainer = runTest(pre_ops=pre_ops)
+##
+##---------------------------------
+##      | Train  | Test   | Valid  |
+##---------------------------------
+## (#)  |  34799 |  12630 |   4410 |
+## (%)  |   1.00 |   0.36 |   0.13 |
+##---------------------------------
+##Number Classes  : 43
+##Image Dimensions: (32, 32, 3)
+##
+##Training...
+##
+##EPOCH 1 ...
+##Validation Accuracy = 0.782
+##
+##EPOCH 2 ...
+##Validation Accuracy = 0.860
+##
+##EPOCH 3 ...
+##Validation Accuracy = 0.866
+##
+##EPOCH 4 ...
+##Validation Accuracy = 0.898
+##
+##EPOCH 5 ...
+##Validation Accuracy = 0.909
+##
+##EPOCH 6 ...
+##Validation Accuracy = 0.908
+##
+##EPOCH 7 ...
+##Validation Accuracy = 0.901
+##
+##EPOCH 8 ...
+##Validation Accuracy = 0.923
+##
+##EPOCH 9 ...
+##Validation Accuracy = 0.904
+##
+##EPOCH 10 ...
+##Validation Accuracy = 0.908
+##
+##Model saved
+#
+#
+##%%
+##------------------------------------------
+## EPOCHS          : 10
+## BATCH_SIZE      : 128
+## Pre-process Ops : [NormalizeImage-ZeroMeanImage-UnitVarImage]
+## Save Dir        : EP-10_BS-128_R-0.001_OPS-[NormalizeImage-ZeroMeanImage-UnitVarImage]
+##
+##---------------------------------
+##      | Train  | Test   | Valid  |
+##---------------------------------
+## (#)  |  34799 |  12630 |   4410 |
+## (%)  |   1.00 |   0.36 |   0.13 |
+##---------------------------------
+##Number Classes  : 43
+##Image Dimensions: (32, 32, 3)
+##
+##Training...
+##
+##EPOCH  1 ...
+##Validation Accuracy = 0.834
+##
+##EPOCH  2 ...
+##Validation Accuracy = 0.879
+##
+##EPOCH  3 ...
+##Validation Accuracy = 0.895
+##
+##EPOCH  4 ...
+##Validation Accuracy = 0.900
+##
+##EPOCH  5 ...
+##Validation Accuracy = 0.887
+##
+##EPOCH  6 ...
+##Validation Accuracy = 0.915
+##
+##EPOCH  7 ...
+##Validation Accuracy = 0.910
+##
+##EPOCH  8 ...
+##Validation Accuracy = 0.901
+##
+##EPOCH  9 ...
+##Validation Accuracy = 0.897
+##
+##EPOCH 10 ...
+##Validation Accuracy = 0.918
+##
+##Model saved : EP-10_BS-128_R-0.001_OPS-[NormalizeImage-ZeroMeanImage-UnitVarImage]_003/LeNet
+#
+##%%
+##------------------------------------------
+## EPOCHS          : 10
+## BATCH_SIZE      : 128
+## Pre-process Ops : [ZeroMeanImage]
+## Save Dir        : EP-10_BS-128_R-0.001_OPS-[ZeroMeanImage]
+##
+##---------------------------------
+##      | Train  | Test   | Valid  |
+##---------------------------------
+## (#)  |  34799 |  12630 |   4410 |
+## (%)  |   1.00 |   0.36 |   0.13 |
+##---------------------------------
+##Number Classes  : 43
+##Image Dimensions: (32, 32, 3)
+##
+##Training...
+##
+##EPOCH  1 ...
+##Validation Accuracy = 0.721
+##
+##EPOCH  2 ...
+##Validation Accuracy = 0.828
+##
+##EPOCH  3 ...
+##Validation Accuracy = 0.857
+##
+##EPOCH  4 ...
+##Validation Accuracy = 0.892
+##
+##EPOCH  5 ...
+##Validation Accuracy = 0.868
+##
+##EPOCH  6 ...
+##Validation Accuracy = 0.899
+##
+##EPOCH  7 ...
+##Validation Accuracy = 0.889
+##
+##EPOCH  8 ...
+##Validation Accuracy = 0.901
+##
+##EPOCH  9 ...
+##Validation Accuracy = 0.910
+##
+##EPOCH 10 ...
+##Validation Accuracy = 0.912
+##
+##Model saved : EP-10_BS-128_R-0.001_OPS-[ZeroMeanImage]_000/LeNet
+#
+##%%
+##------------------------------------------
+## EPOCHS          : 10
+## BATCH_SIZE      : 128
+## Pre-process Ops : []
+## Save Dir        : EP-10_BS-128_R-0.001_OPS-[]
+##
+##---------------------------------
+##      | Train  | Test   | Valid  |
+##---------------------------------
+## (#)  |  34799 |  12630 |   4410 |
+## (%)  |   1.00 |   0.36 |   0.13 |
+##---------------------------------
+##Number Classes  : 43
+##Image Dimensions: (32, 32, 3)
+##
+##Training...
+##
+##EPOCH  1 ...
+##Validation Accuracy = 0.616
+##
+##EPOCH  2 ...
+##Validation Accuracy = 0.755
+##
+##EPOCH  3 ...
+##Validation Accuracy = 0.817
+##
+##EPOCH  4 ...
+##Validation Accuracy = 0.828
+##
+##EPOCH  5 ...
+##Validation Accuracy = 0.845
+##
+##EPOCH  6 ...
+##Validation Accuracy = 0.850
+##
+##EPOCH  7 ...
+##Validation Accuracy = 0.872
+##
+##EPOCH  8 ...
+##Validation Accuracy = 0.873
+##
+##EPOCH  9 ...
+##Validation Accuracy = 0.870
+##
+##EPOCH 10 ...
+##Validation Accuracy = 0.877
+##
+##Model saved : EP-10_BS-128_R-0.001_OPS-[]_000/LeNet
+#
+##%%
+#
+#
+##Image Dimensions: (32, 32, 3)
+##
+##
+##Class: 0 | [103  45  54  61 177]
+##Class: 1 | [1423  622 1425  811 1318]
+##Class: 2 | [1336 1193  726   19 1463]
+##Class: 3 | [ 355  800 1234  422  860]
+##Class: 4 | [1410  176 1131 1616 1030]
+#
+##%%
+#
+#
+#
+#from matplotlib.colors import hsv_to_rgb
+#import cv2
+#
+#ims = [data.train[1][811], data.train[3][422], data.train[4][1131] ]
+#hsv = [cv2.cvtColor(im, cv2.COLOR_RGB2HSV) for im in ims]
+#
+#hsv_boost = [np.copy(h) for h in hsv]
+#for i in hsv_boost: i[:,:,2]=i[:,:,2]*1
+#
+#ims2 = [hsv,hsv_boost]
+#
 #plot_grid_subplot(2, 3, lambda r,c,fig,axs: axs[r][c].imshow(((cv2.cvtColor(ims2[r][c],cv2.COLOR_HSV2RGB)))))
-
-
-
-
+#
+##%%
+#
+#hsv_norm = [np.copy(h)/255.0 for h in hsv]
+##hsv_mean = [np.copy(h) -127.0 for h in hsv]
+#
+#hsv_uvar = [np.copy(h) for h in hsv_norm]
+#for h in hsv_uvar:
+#    h[:,:,0] /= np.max(h[:,:,0])
+#    h[:,:,1] /= np.max(h[:,:,1])
+#    h[:,:,2] /= np.max(h[:,:,2])
+#    
+#p = hsv_uvar
+#plot_grid_subplot(1, 3, lambda r,c,fig,axs: axs[c].imshow( hsv_to_rgb(p[c]) ))
+#plot_grid_subplot(1, 3, lambda r,c,fig,axs: axs[c].imshow( ims[c]))
+#
+##plot_grid_subplot(2, 3, lambda r,c,fig,axs: axs[r][c].imshow(((cv2.cvtColor(ims2[r][c],cv2.COLOR_HSV2RGB)))))
+#
+#
+#
+#
