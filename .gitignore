@@ -7,3 +7,4 @@
 *.gz
 *.pickletest_results/
 test_results/
+traffic-signs-data
