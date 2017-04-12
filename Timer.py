@@ -21,7 +21,9 @@ class Timer:
         if (self.mins <  60): t, u = self.mins, 'mins'
         if (self.secs < 300): t, u = self.secs, 'secs'        
         if (self.msecs<1000): t, u = self.msecs,'ms'        
+        print('---------------------------------------------------------------')
         print('elapsed time: {:5.3f} {}'.format(t, u))
+        print('---------------------------------------------------------------')
 
     def run(func):
         ret = None
