@@ -35,7 +35,7 @@ def runTest(D=None, EPOCHS=10, BATCH_SIZE=128, rate=0.001, pre_ops=[],network=MT
     T.train(dirname=STR, pre_ops=pre_ops)
     return D, T
 
-#%%
+
 from matplotlib.colors import hsv_to_rgb
 import cv2
 
@@ -156,10 +156,6 @@ def warpImage(im_src, mat):
     sz = im_src.shape
     im_dst = np.zeros_like(im_src)
     
-#    src = np.float32([ [5,5],  [5, 25], [25, 5]])
-#    dst = (np.random.rand(3,2) * 32).astype(np.float32)
-#    dst = np.float32([[13,3], [10, 25], [25, 5]])
-#    mat = cv2.getAffineTransform(src, dst)
     for i in range(3):
         if (mat.shape == (3,3)): 
             im_dst[:, :, i] = cv2.warpPerspective(im_src[:,:,i], mat, (sz[0], sz[1]), borderMode=cv2.BORDER_REPLICATE)
@@ -196,33 +192,37 @@ def augmentDataSet(dataset):
             ims.append(warpImage(img, mat))
     
     
-def augmentPerspective(img, sz=22, delta=3, t_rng=range(-10, 10)):
+def augmentPerspective(img, sz=22, delta=3, t_rng=range(-10, 10), perspTrans=True):
     rand = lambda rng, size=None: np.random.randint(rng.start, rng.stop, size=size)
     pt2Rng  = lambda pt, d=5: [range(i-d, i+d) for i in pt]
-    getRect = lambda c=16, sz=22: [[c - sz/2, c - sz/2], 
+    getRect = lambda c=16, sz=sz: [[c - sz/2, c - sz/2], 
                                    [c + sz/2, c - sz/2],
                                    [c + sz/2, c + sz/2],
                                    [c - sz/2, c + sz/2]] 
     
 
-    pts = np.int32(getRect(sz=22))
+    pts = np.int32(getRect(sz=sz))
     dst = [[rand(pt2Rng(pt, d=delta)[0]), rand(pt2Rng(pt, d=delta)[1])] for pt in pts]
     pts, dst = np.float32(pts), np.float32(dst) + np.float32([rand(t_rng), rand(t_rng)])   
-    mat = cv2.getPerspectiveTransform(pts, dst)
+    mat = cv2.getPerspectiveTransform(pts, dst) if perspTrans else cv2.getAffineTransform(pts[:3,:], dst[:3,:])
 
     dst = np.zeros_like(img)        
     if (len(img.shape) == 2): 
-        return cv2.warpPerspective(img, mat, (img.shape[0], img.shape[1]), borderMode=cv2.BORDER_REPLICATE)    
-    
+        if (perspTrans): 
+            return cv2.warpPerspective(img, mat, (img.shape[0], img.shape[1]), borderMode=cv2.BORDER_REPLICATE) 
+        else: 
+            return cv2.warpAffine(img, mat, (img.shape[0], img.shape[1]), borderMode=cv2.BORDER_REPLICATE) 
     if (len(img.shape) == 3):     
         for i in range(img.shape[2]):
-            dst[:, :, i] = cv2.warpPerspective(img[:,:,i], mat, (img.shape[0], img.shape[1]), borderMode=cv2.BORDER_REPLICATE)
+            if (perspTrans): 
+                dst[:, :, i] = cv2.warpPerspective(img[:,:,i], mat, (img.shape[0], img.shape[1]), borderMode=cv2.BORDER_REPLICATE)
+            else: 
+                dst[:, :, i] = cv2.warpAffine(img[:,:,i], mat, (img.shape[0], img.shape[1]), borderMode=cv2.BORDER_REPLICATE)
         return dst    
-
     return img
 
 
-def augmentDatasetPerspective(dataset, num_total=2100):
+def augmentDatasetPerspective(dataset, num_total=2100, sz=22, delta=3, t_rng=range(-10, 10), perspTrans=False):
     
     for v in (dataset):
         ims = dataset[v]
@@ -231,7 +231,8 @@ def augmentDatasetPerspective(dataset, num_total=2100):
         if (delta < 0): continue
 
         for idx in np.random.randint(low=0, high=n, size=delta):
-            ims.append(augmentPerspective(ims[idx], sz=24, delta=3, t_rng=range(-7,7)))
+            ims.append(augmentPerspective(ims[idx], sz=sz, delta=delta, t_rng=t_rng, perspTrans=perspTrans))
+    return dataset
 
 class DataModifier:
     
@@ -262,41 +263,41 @@ class DataModifier:
     def get_data_dist(self, key): return [len(self.dmap[key][ar]) for ar in self.dmap[key]]
         
 
-    def updateDataSet(self, org):
+    def updateDataSet(org, dataset_src, dataset_dst):
         new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
         new_lbl = np.empty((0), dtype=np.float32)
-        for i in self.train:
-            new_ims = np.vstack((new_ims, self.train[i]))
-            new_lbl = np.append(new_lbl, np.repeat(i, len(self.train[i])))
-        org.train['features'], org.train['labels'] = new_ims, new_lbl 
-
-        new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
-        new_lbl = np.empty((0), dtype=np.float32)
-        for i in self.test:
-            new_ims = np.vstack((new_ims, self.test[i]))
-            new_lbl = np.append(new_lbl, np.repeat(i, len(self.test[i])))
-        org.test['features'], org.test['labels'] = new_ims, new_lbl
+        for i in dataset_src:
+            new_ims = np.vstack((new_ims, dataset_src[i]))
+            new_lbl = np.append(new_lbl, np.repeat(i, len(dataset_src[i])))
+        dataset_dst['features'], dataset_dst['labels'] = new_ims, new_lbl 
 
         org.reset_data()
         for i in range(3): 
             org.shuffle_training_data()
+            org.shuffle_valid_data()
             org.shuffle_test_data()
         
         org.print_data_info()
         
         return new_lbl, new_ims
-        
+
 
 #%%
+
+import ConvNet as CNN
 
 def load():
     org  = IC()
     data = DataModifier(org)
     #augmentDataSet(data.train)
     #augmentDataSet(data.test)
-    augmentDatasetPerspective(data.train, num_total=3000)
+    augmentDatasetPerspective(data.train, num_total=2000)
+    augmentDatasetPerspective(data.test,  num_total=800)
+    augmentDatasetPerspective(data.valid, num_total=300)
     #augmentDataSet(data.test)
-    l,im = data.updateDataSet(org)
+    l,im = DataModifier.updateDataSet(org, data.train, org.train)
+    l,im = DataModifier.updateDataSet(org, data.test,  org.test)
+    l,im = DataModifier.updateDataSet(org, data.valid, org.valid)    
     return org, data
 
 
@@ -310,23 +311,19 @@ def train():
     #            {kEPOCHS: 25, kBATCH_SIZE:  64, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
     #            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5, 3:0.5}}},
     #            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
-                {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {}}}     
+#                {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: MT.LeNet, kNETWORK_ARGS: {}}     
+                {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: CNN.CreateLeNet, kNETWORK_ARGS: {'sigma':0.01}}     
             ]
     
-    
     for p in tests:
-        p[kPRE_OPS] = [IC.ZShift]
+        p[kPRE_OPS] = [IC.Norm, IC.ZMean]
         Data, Trainer = runTest(D=org, **p)
 
 
-#%%
-#
-#org, data = Timer.run(load)
-#
-#%%
-#
-#Timer.run(train)
-#
+if __name__ == "__main__":    
+    org, data = Timer.run(load)
+    Timer.run(train)
+
 #%%
 
     
