@@ -291,10 +291,10 @@ def load():
     data = DataModifier(org)
     #augmentDataSet(data.train)
     #augmentDataSet(data.test)
+    #augmentDataSet(data.valid)
     augmentDatasetPerspective(data.train, num_total=2000)
     augmentDatasetPerspective(data.test,  num_total=800)
     augmentDatasetPerspective(data.valid, num_total=300)
-    #augmentDataSet(data.test)
     l,im = DataModifier.updateDataSet(org, data.train, org.train)
     l,im = DataModifier.updateDataSet(org, data.test,  org.test)
     l,im = DataModifier.updateDataSet(org, data.valid, org.valid)    
@@ -312,7 +312,7 @@ def train():
     #            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5, 3:0.5}}},
     #            {kEPOCHS: 25, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: MT.LeNetWithDropOut, kNETWORK_ARGS: {'dropouts': {2:0.5}}},
 #                {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: MT.LeNet, kNETWORK_ARGS: {}}     
-                {kEPOCHS:  15, kBATCH_SIZE: 64, kRATE: 0.002, kNETWORK: CNN.CreateLeNet, kNETWORK_ARGS: {'sigma':0.01}}     
+                {kEPOCHS:  15, kBATCH_SIZE: 128, kRATE: 0.002, kNETWORK: CNN.CreateLeNet, kNETWORK_ARGS: {'sigma':0.01}}     
             ]
     
     for p in tests:
