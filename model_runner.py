@@ -5,6 +5,34 @@ import numpy as np
 import matplotlib.pyplot as plt
 from Timer import Timer
 import os
+import sys
+
+class Utils:    
+
+    def get_string_for_array(ar):
+        varstr = '['
+        for i in ar: varstr+=(i.__name__ + "-") 
+    
+        if (varstr.endswith('-')): varstr = varstr[0:-1]    
+        varstr += ']'
+        return varstr
+        
+    def printTestParam(EPOCHS, BATCH_SIZE, rate, pre_ops, save_dir='.', fid=sys.stdout):
+        fid.write("------------------------------------------\n")
+        fid.write("-EPOCHS          : " + str(EPOCHS) + "\n")
+        fid.write("-BATCH_SIZE      : " + str(BATCH_SIZE) + "\n")
+        fid.write("-Pre-process Ops : " + Utils.get_string_for_array(pre_ops) + "\n")
+        fid.write("-Save Dir        : " + save_dir + "\n")
+        fid.write("------------------------------------------\n")
+        fid.write("")    
+
+
+    def find_an_empty_dir(dirname):
+        v = 0
+        while (True):
+            tmp_name = os.path.join(dirname, "%03d"%(v))
+            if (os.path.isdir(tmp_name) == False): return tmp_name
+            v+=1
 
 def get_string_for_array(ar):
     varstr = '['
@@ -100,8 +128,26 @@ def boost_eq_gray_zmean_uvar(img):
     return h
 
 
+import random
 
-def plot_data(data, classes=[], n_per_class=0, signs=None):
+def basicNorm(img):
+    shape = img.shape
+    dst = np.float32(img)
+    if (len(shape) == 2):
+            p  = dst
+            p -= p.min()
+            p /= p.max()        
+    else:
+        for i in range(shape[2]): 
+            p  = dst[:, :, i]
+            p -= p.min()
+            p /= p.max()
+
+    return dst
+
+def plot_data(data, classes=None, n_per_class=5):
+    if (classes is None): classes = random.sample(range(0,43), 5)
+
     n_classes = len(classes)        
     im_grid = {}
     for j, k in enumerate(classes):
@@ -113,7 +159,7 @@ def plot_data(data, classes=[], n_per_class=0, signs=None):
         im_grid[j] = [images[im_idx[i]] for i in range(n_per_class)]         
 
     
-    func = lambda r, c, fig, axs, ims: [axs[r][c].imshow(ims[c][r]), axs[r][c].axis('off')]
+    func = lambda r, c, fig, axs, ims: [axs[r][c].imshow(basicNorm(ims[c][r])), axs[r][c].axis('off')]
     plot_grid_subplot(n_per_class, n_classes, func, {'ims': im_grid})       
     
 
@@ -194,7 +240,7 @@ def augmentDataSet(dataset):
     
 def augmentPerspective(img, sz=22, delta=3, t_rng=range(-10, 10), perspTrans=True):
     rand = lambda rng, size=None: np.random.randint(rng.start, rng.stop, size=size)
-    pt2Rng  = lambda pt, d=5: [range(i-d, i+d) for i in pt]
+    pt2Rng  = lambda pt, d=delta: [range(i-d, i+d) for i in pt]
     getRect = lambda c=16, sz=sz: [[c - sz/2, c - sz/2], 
                                    [c + sz/2, c - sz/2],
                                    [c + sz/2, c + sz/2],
@@ -227,10 +273,10 @@ def augmentDatasetPerspective(dataset, num_total=2100, sz=22, delta=3, t_rng=ran
     for v in (dataset):
         ims = dataset[v]
         n = len(ims)
-        delta = num_total - n
-        if (delta < 0): continue
+        num_aug = num_total - n
+        if (num_aug < 0): continue
 
-        for idx in np.random.randint(low=0, high=n, size=delta):
+        for idx in np.random.randint(low=0, high=n, size=num_aug):
             ims.append(augmentPerspective(ims[idx], sz=sz, delta=delta, t_rng=t_rng, perspTrans=perspTrans))
     return dataset
 
@@ -239,10 +285,14 @@ class DataModifier:
     def __init__(self, data):
         self.signs = data.signs
         self.num_classes = data.num_classes
+#        self.train = DataModifier.split_data_into_classes(data.X_train, data.y_train, self.num_classes)
+#        self.valid = DataModifier.split_data_into_classes(data.X_valid, data.y_valid, self.num_classes)
+#        self.test  = DataModifier.split_data_into_classes(data.X_test,  data.y_test , self.num_classes)
         self.train = DataModifier.split_data_into_classes(data.train['features'], data.train['labels'], self.num_classes)
         self.valid = DataModifier.split_data_into_classes(data.valid['features'], data.valid['labels'], self.num_classes)
         self.test  = DataModifier.split_data_into_classes(data.test ['features'], data.test ['labels'], self.num_classes)
         self.dmap  = { 'train': self.train, 'test': self.test, 'valid': self.valid }
+        
     
     def split_data_into_classes(images, labels, num_classes):
         l_data = {i:[] for i in range(num_classes)}
@@ -269,16 +319,34 @@ class DataModifier:
         for i in dataset_src:
             new_ims = np.vstack((new_ims, dataset_src[i]))
             new_lbl = np.append(new_lbl, np.repeat(i, len(dataset_src[i])))
-        dataset_dst['features'], dataset_dst['labels'] = new_ims, new_lbl 
+        dataset_dst['features'], dataset_dst['labels'] = new_ims, new_lbl.astype(np.int)
+
+        org.reset_data()
+        org.print_data_info()
+        
+
+    def updateDataSetOld(self, org):
+        new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
+        new_lbl = np.empty((0), dtype=np.float32)
+        for i in self.train:
+            new_ims = np.vstack((new_ims, self.train[i]))
+            new_lbl = np.append(new_lbl, np.repeat(i, len(self.train[i])))
+        org.train['features'], org.train['labels'] = new_ims, new_lbl 
+
+        new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
+        new_lbl = np.empty((0), dtype=np.float32)
+        for i in self.test:
+            new_ims = np.vstack((new_ims, self.test[i]))
+            new_lbl = np.append(new_lbl, np.repeat(i, len(self.test[i])))
+        org.test['features'], org.test['labels'] = new_ims, new_lbl
 
         org.reset_data()
         for i in range(3): 
             org.shuffle_training_data()
-            org.shuffle_valid_data()
             org.shuffle_test_data()
+            org.shuffle_valid_data()
         
-        org.print_data_info()
-        
+        org.print_data_info()        
         return new_lbl, new_ims
 
 

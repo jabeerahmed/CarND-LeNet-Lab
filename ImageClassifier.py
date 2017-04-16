@@ -15,7 +15,7 @@ from tensorflow.contrib.layers import flatten
 class ImageClassifier:
     
     print("ImageClassifier Loaded!!!")    
-    def __init__(self, data_dir='.', label_csv_file='signnames.csv'):
+    def __init__(self, data_dir='traffic-signs-data', label_csv_file='signnames.csv'):
         self.data_dir=data_dir
         self.label_csv_file=label_csv_file
         
@@ -54,9 +54,9 @@ class ImageClassifier:
 
 
     def Load_Image_Data(data_dir):
-        training_file = 'traffic-signs-data/train.p'
-        validation_file='traffic-signs-data/valid.p'
-        testing_file = 'traffic-signs-data/test.p'
+        training_file =  os.path.join(data_dir, 'train.p')
+        validation_file= os.path.join(data_dir, 'valid.p')
+        testing_file =   os.path.join(data_dir, 'test.p')
         with open(training_file, mode='rb') as f:
             train = pickle.load(f)
         with open(validation_file, mode='rb') as f:

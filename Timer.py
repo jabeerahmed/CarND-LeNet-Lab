@@ -25,8 +25,8 @@ class Timer:
         print('elapsed time: {:5.3f} {}'.format(t, u))
         print('---------------------------------------------------------------')
 
-    def run(func):
+    def run(func, args={}):
         ret = None
-        with Timer() as timer: ret = func()
+        with Timer() as timer: ret = func(**args)
         timer.printTime()
         return ret
