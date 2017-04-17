@@ -189,8 +189,12 @@ class ModelTrainer:
         sigma = 0.1
         
         Layer = 0
+#        # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
+#        conv1 = ModelTrainer.conv2d(x, 3, 3, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
+#        # Activation.
+#        relu1 = tf.nn.relu(conv1)
         # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-        conv1 = ModelTrainer.conv2d(x, 5, 5, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
+        conv1 = ModelTrainer.conv2d(x, 5, 5, 10, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
         # Activation.
         relu1 = tf.nn.relu(conv1)
         # Pooling. Input = 28x28x6. Output = 14x14x6.

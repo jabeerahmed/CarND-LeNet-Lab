@@ -285,12 +285,12 @@ class DataModifier:
     def __init__(self, data):
         self.signs = data.signs
         self.num_classes = data.num_classes
-#        self.train = DataModifier.split_data_into_classes(data.X_train, data.y_train, self.num_classes)
-#        self.valid = DataModifier.split_data_into_classes(data.X_valid, data.y_valid, self.num_classes)
-#        self.test  = DataModifier.split_data_into_classes(data.X_test,  data.y_test , self.num_classes)
-        self.train = DataModifier.split_data_into_classes(data.train['features'], data.train['labels'], self.num_classes)
-        self.valid = DataModifier.split_data_into_classes(data.valid['features'], data.valid['labels'], self.num_classes)
-        self.test  = DataModifier.split_data_into_classes(data.test ['features'], data.test ['labels'], self.num_classes)
+        self.train = DataModifier.split_data_into_classes(data.X_train, data.y_train, self.num_classes)
+        self.valid = DataModifier.split_data_into_classes(data.X_valid, data.y_valid, self.num_classes)
+        self.test  = DataModifier.split_data_into_classes(data.X_test,  data.y_test , self.num_classes)
+#        self.train = DataModifier.split_data_into_classes(data.train['features'], data.train['labels'], self.num_classes)
+#        self.valid = DataModifier.split_data_into_classes(data.valid['features'], data.valid['labels'], self.num_classes)
+#        self.test  = DataModifier.split_data_into_classes(data.test ['features'], data.test ['labels'], self.num_classes)
         self.dmap  = { 'train': self.train, 'test': self.test, 'valid': self.valid }
         
     
