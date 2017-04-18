@@ -349,6 +349,77 @@ class DataModifier:
         org.print_data_info()        
         return new_lbl, new_ims
 
+#%%
+
+class DataModifier2:
+    
+    def __init__(self, data):
+        self.signs = data.signs
+        self.num_classes = data.num_classes
+        self.train = DataModifier.split_data_into_classes(data.X_train, data.y_train, self.num_classes)
+        self.valid = DataModifier.split_data_into_classes(data.X_valid, data.y_valid, self.num_classes)
+        self.test  = DataModifier.split_data_into_classes(data.X_test,  data.y_test , self.num_classes)
+#        self.train = DataModifier.split_data_into_classes(data.train['features'], data.train['labels'], self.num_classes)
+#        self.valid = DataModifier.split_data_into_classes(data.valid['features'], data.valid['labels'], self.num_classes)
+#        self.test  = DataModifier.split_data_into_classes(data.test ['features'], data.test ['labels'], self.num_classes)
+        self.dmap  = { 'train': self.train, 'test': self.test, 'valid': self.valid }
+        
+    
+    def split_data_into_classes(images, labels, num_classes):
+        l_data = {i:[] for i in range(num_classes)}
+        for idx, label in enumerate(labels): l_data[label].append(images[idx])
+        return l_data    
+    
+
+    def print_data_stats(l_data, data_info, signs):
+        print("-----------------------------------------------------------------------|")
+        print("| Data : {:62.62}|".format(data_info))
+        print("|                                                                      |")
+        print("| Class |  Num Imgs  | Label                                           |")
+        print("|----------------------------------------------------------------------|")
+        for key, imgs in l_data.items():
+            print("|  {:>3d}  |  {:>6d}  |  {}".format(key, len(imgs), signs[key] ))
+            print("|----------------------------------------------------------------------|")
+            
+    def get_data_dist(self, key): return [len(self.dmap[key][ar]) for ar in self.dmap[key]]
+        
+
+    def updateDataSet(org, dataset_src, dataset_dst):
+        new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
+        new_lbl = np.empty((0), dtype=np.float32)
+        for i in dataset_src:
+            new_ims = np.vstack((new_ims, dataset_src[i]))
+            new_lbl = np.append(new_lbl, np.repeat(i, len(dataset_src[i])))
+        dataset_dst['features'], dataset_dst['labels'] = new_ims, new_lbl.astype(np.int)
+
+        org.reset_data()
+        org.print_data_info()
+        
+
+    def updateDataSetOld(self, org):
+        new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
+        new_lbl = np.empty((0), dtype=np.float32)
+        for i in self.train:
+            new_ims = np.vstack((new_ims, self.train[i]))
+            new_lbl = np.append(new_lbl, np.repeat(i, len(self.train[i])))
+        org.train['features'], org.train['labels'] = new_ims, new_lbl 
+
+        new_ims = np.empty((0, 32, 32, 3), dtype=np.float32)
+        new_lbl = np.empty((0), dtype=np.float32)
+        for i in self.test:
+            new_ims = np.vstack((new_ims, self.test[i]))
+            new_lbl = np.append(new_lbl, np.repeat(i, len(self.test[i])))
+        org.test['features'], org.test['labels'] = new_ims, new_lbl
+
+        org.reset_data()
+        for i in range(3): 
+            org.shuffle_training_data()
+            org.shuffle_test_data()
+            org.shuffle_valid_data()
+        
+        org.print_data_info()        
+        return new_lbl, new_ims
+
 
 #%%
 
@@ -360,12 +431,12 @@ def load():
     #augmentDataSet(data.train)
     #augmentDataSet(data.test)
     #augmentDataSet(data.valid)
-    augmentDatasetPerspective(data.train, num_total=2000)
-    augmentDatasetPerspective(data.test,  num_total=800)
-    augmentDatasetPerspective(data.valid, num_total=300)
-    l,im = DataModifier.updateDataSet(org, data.train, org.train)
-    l,im = DataModifier.updateDataSet(org, data.test,  org.test)
-    l,im = DataModifier.updateDataSet(org, data.valid, org.valid)    
+#    augmentDatasetPerspective(data.train, num_total=2000)
+#    augmentDatasetPerspective(data.test,  num_total=800)
+#    augmentDatasetPerspective(data.valid, num_total=300)
+#    l,im = DataModifier.updateDataSet(org, data.train, org.train)
+#    l,im = DataModifier.updateDataSet(org, data.test,  org.test)
+#    l,im = DataModifier.updateDataSet(org, data.valid, org.valid)    
     return org, data
 
 
@@ -390,7 +461,7 @@ def train():
 
 if __name__ == "__main__":    
     org, data = Timer.run(load)
-    Timer.run(train)
+#    Timer.run(train)
 
 #%%
 

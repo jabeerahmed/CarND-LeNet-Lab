@@ -294,27 +294,30 @@ class ModelTrainer:
         return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
     
 
-    def __init__(self, data, network=LeNet, network_args={}, EPOCHS=10, BATCH_SIZE=128, rate=0.001):
+#    def __init__(self, data, network=LeNet, network_args={}, EPOCHS=10, BATCH_SIZE=128, rate=0.001):
+    def __init__(self, X_train, y_train, X_test, y_test, network=LeNet, network_args={}, EPOCHS=10, BATCH_SIZE=128, rate=0.001):
         # Hyper-Parameters
-        self.EPOCHS = EPOCHS
-        self.BATCH_SIZE = BATCH_SIZE
-        self.rate = rate
-        self.initialModel(data, network, network_args)
+        self.EPOCHS=EPOCHS 
+        self.BATCH_SIZE=BATCH_SIZE
+        self.rate=rate
+        self.initialModel(X_train, y_train, X_test, y_test, network, network_args)
         
 
-    def initialModel(self, data, network, network_args={}):
-        self.initialize_data_container(data)
+    def initialModel(self, X_train, y_train, X_test, y_test, network, network_args={}):
+        self.initialize_data_container(X_train, y_train, X_test, y_test)
         self.setModelNet(network, network_args)
         self.initTrainingPipeline()
         self.initEvalPipeline()  
     
         
-    def initialize_data_container(self, data):
-        self.data = data
-        self.data.shuffle_training_data()
-        x = tf.placeholder(tf.float32, (None,) + self.data.image_shape)
+    def initialize_data_container(self, X_train, y_train, X_test, y_test):
+        self.X_train, self.y_train = shuffle(X_train, y_train)
+        self.X_test,  self.y_test  = shuffle(X_test,  y_test)
+        self.num_classes = len(np.unique(y_train))
+        self.image_shape = X_train[0].shape
+        x = tf.placeholder(tf.float32, (None,) + self.image_shape)
         y = tf.placeholder(tf.int32, (None))
-        l = tf.one_hot(y, self.data.num_classes)
+        l = tf.one_hot(y, self.num_classes)
         self.x, self.y, self.one_hot_y = x, y, l
         
 
@@ -324,7 +327,7 @@ class ModelTrainer:
         
 
     def initTrainingPipeline(self):
-        self.logits, self.training_operation = ModelTrainer.InitTrainPipeline(self.x, self.data.num_classes, self.one_hot_y, 
+        self.logits, self.training_operation = ModelTrainer.InitTrainPipeline(self.x, self.num_classes, self.one_hot_y, 
                                                                               network=self.network, network_args=self.network_args, 
                                                                               rate=self.rate)        
     
@@ -338,8 +341,7 @@ class ModelTrainer:
         return ModelTrainer.Evaluate(X_data, y_data, self.x, self.y, self.accuracy_operation, self.BATCH_SIZE)
 
         
-    def train(self, dirname='./', pre_ops=[]):
-        
+    def train(self, dirname='./', pre_ops=[], return_stats=True, stat_freq=50, rfunc=None):
         if (os.path.isdir(dirname) == False): os.makedirs(dirname)
         dirname = Utils.find_an_empty_dir(dirname)
         os.mkdir(dirname)
@@ -347,6 +349,7 @@ class ModelTrainer:
         logfile = os.path.join(dirname, self.network.__name__ + '_log.txt')
         fid = open(logfile, 'w')
         run_incomplete = True
+        stats = []
 
         try:            
             with tf.Session() as sess:
@@ -355,16 +358,24 @@ class ModelTrainer:
                 Utils.printTestParam(self.EPOCHS, self.BATCH_SIZE, self.rate, pre_ops, save_dir=dirname, fid=fid)
                 
                 sess.run(tf.global_variables_initializer())
-                num_examples = len(self.data.X_train)
-                            
+                num_examples = len(self.X_train)
+                validation_accuracy = 0
                 for i in range(self.EPOCHS):
-                    self.data.shuffle_training_data()
-                    for offset in range(0, num_examples, self.BATCH_SIZE):
+                    self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
+                    for n, offset in enumerate(range(0, num_examples, self.BATCH_SIZE)):
                         end = offset + self.BATCH_SIZE
-                        batch_x, batch_y = self.data.X_train[offset:end], self.data.y_train[offset:end]
+                        batch_x, batch_y = self.X_train[offset:end], self.y_train[offset:end]
                         sess.run(self.training_operation, feed_dict={self.x: batch_x, self.y: batch_y})
-                        
-                    validation_accuracy = self.evaluate(self.data.X_valid, self.data.y_valid)
+                        if (n % stat_freq == (stat_freq-1)):
+                            t_indx = random.sample(range(0,offset), 30)
+                            tmp_x, tmp_y = self.X_train[t_indx], self.y_train[t_indx]
+                            train_acc = self.evaluate(tmp_x, tmp_y)
+                            stats.append([validation_accuracy, n, train_acc])
+#                            if (rfunc is not None): rfuncArgs = rfunc(rfuncArgs, stats)                            
+                            if (rfunc is not None): rfunc(stats)                            
+                    
+                    self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
+                    validation_accuracy = self.evaluate(self.X_test, self.y_test)
                     print("EPOCH {:2} ...".format(i+1))
                     print("Validation Accuracy = {:.3f}".format(validation_accuracy))
                     print()                
@@ -372,20 +383,21 @@ class ModelTrainer:
                     fid.write("EPOCH {:2} ...".format(i+1))
                     fid.write("Validation Accuracy = {:.3f}".format(validation_accuracy))
                     fid.write('\n')                
-    
+                    
                 self.saver.save(sess, outpath)
                 print("Model saved : " + outpath)
                 run_incomplete = False
             fid.close()
         finally:
-            if (run_incomplete): shutil.rmtree(dirname)    
+            if (run_incomplete): shutil.rmtree(dirname)
+            if (return_stats): return stats
 
 
     def InitTrainPipeline(x, num_classes, one_hot_y, network=(LeNet), network_args={}, rate=0.001):
         logits = network(x, num_classes, **network_args)
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=one_hot_y)
         loss_operation = tf.reduce_mean(cross_entropy)
-        optimizer = tf.train.AdamOptimizer(learning_rate = rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=rate)
         training_operation = optimizer.minimize(loss_operation)
         return (logits, training_operation)
             
