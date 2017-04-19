@@ -194,7 +194,7 @@ class ModelTrainer:
 #        # Activation.
 #        relu1 = tf.nn.relu(conv1)
         # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-        conv1 = ModelTrainer.conv2d(x, 5, 5, 10, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
+        conv1 = ModelTrainer.conv2d(x, 5, 5, 32, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
         # Activation.
         relu1 = tf.nn.relu(conv1)
         # Pooling. Input = 28x28x6. Output = 14x14x6.
@@ -231,37 +231,6 @@ class ModelTrainer:
         # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
         return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
     
-    
-    
-    def LeNet_2(x, num_outputs, mu=0.0, sigma=0.1):    
-        # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
-        mu = 0
-        sigma = 0.1
-        
-        # TODO: Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-        conv1 = ModelTrainer.conv2d(x, 5, 5, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
-        # TODO: Activation.
-        relu1 = tf.nn.relu(conv1)
-        # TODO: Pooling. Input = 28x28x6. Output = 14x14x6.
-        pool1 = tf.nn.max_pool(relu1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
-        # TODO: Layer 2: Convolutional. Output = 10x10x16.
-        conv2 = ModelTrainer.conv2d(pool1, 5, 5, 16, strides=[1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)        
-        # TODO: Activation.
-        relu2 = tf.nn.relu(conv2)
-        # TODO: Pooling. Input = 10x10x16. Output = 5x5x16.
-        pool2 = tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
-        # TODO: Flatten. Input = 5x5x16. Output = 400.
-        fc0 = flatten(pool2)   
-        # TODO: Layer 3: Fully Connected. Input = 400. Output = 120.
-        fc1 = ModelTrainer.fully_connected(fc0, 120, mu, sigma)
-        # TODO: Activation.
-        fc1_relu = tf.nn.relu(fc1)
-        # TODO: Layer 4: Fully Connected. Input = 120. Output = 84.
-        fc2 = ModelTrainer.fully_connected(fc1_relu, 84, mu, sigma)    
-        # TODO: Activation.
-        fc2_relu = tf.nn.relu(fc2)
-        # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
-        return conv1, relu1, pool1, conv2, relu2, pool2, fc0, fc1, ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
     
     def LeNet(x, num_outputs, mu=0.0, sigma=0.1):    
         # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
@@ -370,10 +339,10 @@ class ModelTrainer:
                             t_indx = random.sample(range(0,offset), 30)
                             tmp_x, tmp_y = self.X_train[t_indx], self.y_train[t_indx]
                             train_acc = self.evaluate(tmp_x, tmp_y)
-                            stats.append([validation_accuracy, n, train_acc])
+                            stats.append([validation_accuracy, n, train_acc, i])
 #                            if (rfunc is not None): rfuncArgs = rfunc(rfuncArgs, stats)                            
                             if (rfunc is not None): rfunc(stats)                            
-                    
+                            print("{:5d}. Training Accuracy = {:.3f}".format(n, train_acc))                    
                     self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
                     validation_accuracy = self.evaluate(self.X_test, self.y_test)
                     print("EPOCH {:2} ...".format(i+1))
