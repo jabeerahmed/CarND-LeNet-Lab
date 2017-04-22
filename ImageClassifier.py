@@ -165,6 +165,8 @@ class ImageClassifier:
     def shuffle_valid_data(self):
         self.X_valid, self.y_valid = shuffle(self.X_valid, self.y_valid)
 
+    def createModelTrainer(self, args={}):
+        return ModelTrainer(self.X_train, self.y_train, self.X_valid, self.y_valid, **args)
 
 class ModelTrainer:
     
@@ -180,63 +182,47 @@ class ModelTrainer:
         F_b = tf.Variable(np.zeros((fd, )), dtype=dtype)
         return tf.nn.conv2d(x, F_W, strides, padding) + F_b
     
-    def addDropOut(layer, keep_prob):
-        return tf.nn.dropout(layer, keep_prob=tf.constant(value=keep_prob, dtype=tf.float32))
-    
+    def addDropOut(layer, keep_prob, train_feed, eval_feed, name=None):
+        if ( 0 < keep_prob < 1 ):
+            kp = tf.placeholder(tf.float32, name=name)
+            train_feed.update({kp: keep_prob})
+            eval_feed.update({kp: 1.0})
+            return tf.nn.dropout(layer, keep_prob=kp)
+        return layer
+
     def LeNetWithDropOut(x, num_outputs, mu=0.0, sigma=0.1, dropouts={0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0}):    
-        # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
-        mu = 0
-        sigma = 0.1
-        
-        Layer = 0
-#        # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-#        conv1 = ModelTrainer.conv2d(x, 3, 3, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
-#        # Activation.
-#        relu1 = tf.nn.relu(conv1)
-        # Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
-        conv1 = ModelTrainer.conv2d(x, 5, 5, 32, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
-        # Activation.
+        train_feed, eval_feed = {}, {}
+
+        Layer = 0       # Convolutional. Input = 32x32x3. Output = 28x28x6.
+        conv1 = ModelTrainer.conv2d(x, 5, 5, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
         relu1 = tf.nn.relu(conv1)
-        # Pooling. Input = 28x28x6. Output = 14x14x6.
         pool1 = tf.nn.max_pool(relu1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
-        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): pool1 = ModelTrainer.addDropOut(pool1, dropouts[Layer])
+        if (Layer in dropouts): pool1 = ModelTrainer.addDropOut(pool1, dropouts[Layer], train_feed, eval_feed)
             
-        Layer = 1
-        # Layer 2: Convolutional. Output = 10x10x16.
-        conv2 = ModelTrainer.conv2d(pool1, 5, 5, 16, strides=[1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)        
-        # Activation.
-        relu2 = tf.nn.relu(conv2)        
-        # Pooling. Input = 10x10x16. Output = 5x5x16.
+        Layer = 1   #Convolutional. Input = 32x32x3. Output = 28x28x6
+        conv2 = ModelTrainer.conv2d(pool1, 5, 5, 16, strides=[1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
+        relu2 = tf.nn.relu(conv2)
         pool2 = tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
-        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): pool2 = ModelTrainer.addDropOut(pool2, dropouts[Layer])
+        if (Layer in dropouts): pool2 = ModelTrainer.addDropOut(pool2, dropouts[Layer], train_feed, eval_feed)
 
-        Layer = 2
-        # TODO: Flatten. Input = 5x5x16. Output = 400.
-        fc0 = flatten(pool2)   
-        # TODO: Layer 3: Fully Connected. Input = 400. Output = 120.
+        Layer = 2       # Flatten. Input = 5x5x16. Output = 400.
+        fc0 = flatten(pool2)
+
+        Layer = 3       # Layer 3: Fully Connected. Input = 400. Output = 120.
         fc1 = ModelTrainer.fully_connected(fc0, 120, mu, sigma)
-        # TODO: Activation.
         fc1_relu = tf.nn.relu(fc1)
-        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): fc1_relu = ModelTrainer.addDropOut(fc1_relu, dropouts[Layer])
+        if (Layer in dropouts): fc1_relu = ModelTrainer.addDropOut(fc1_relu, dropouts[Layer], train_feed, eval_feed)
 
-
-        Layer = 3
-        # TODO: Layer 4: Fully Connected. Input = 120. Output = 84.
-        fc2 = ModelTrainer.fully_connected(fc1_relu, 84, mu, sigma)    
-        # TODO: Activation.
+        Layer = 4       # Fully Connected. Input = 120. Output = 84
+        fc2 = ModelTrainer.fully_connected(fc1_relu, 84, mu, sigma)
         fc2_relu = tf.nn.relu(fc2)
-        if ((Layer in dropouts) and (0.0 < dropouts[Layer] < 1.0)): fc2_relu = ModelTrainer.addDropOut(fc2_relu, dropouts[Layer])
+        if (Layer in dropouts): fc2_relu = ModelTrainer.addDropOut(fc2_relu, dropouts[Layer], train_feed, eval_feed)
 
-        Layer = 4
-        # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
-        return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
+        Layer = 5     # Fully Connected. Input = 84. Output = 43.
+        return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma), train_feed, eval_feed
     
     
-    def LeNet(x, num_outputs, mu=0.0, sigma=0.1):    
-        # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
-        mu = 0
-        sigma = 0.1
-        
+    def LeNet(x, num_outputs, mu=0.0, sigma=0.1):
         # TODO: Layer 1: Convolutional. Input = 32x32x1. Output = 28x28x6.
         conv1 = ModelTrainer.conv2d(x, 5, 5, 6, strides = [1, 1, 1, 1], padding='VALID', mu=mu, sigma=sigma)
         # TODO: Activation.
@@ -260,7 +246,7 @@ class ModelTrainer:
         # TODO: Activation.
         fc2_relu = tf.nn.relu(fc2)
         # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
-        return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma)   
+        return ModelTrainer.fully_connected(fc2_relu, num_outputs, mu, sigma), {}, {}
     
 
 #    def __init__(self, data, network=LeNet, network_args={}, EPOCHS=10, BATCH_SIZE=128, rate=0.001):
@@ -296,21 +282,42 @@ class ModelTrainer:
         
 
     def initTrainingPipeline(self):
-        self.logits, self.training_operation = ModelTrainer.InitTrainPipeline(self.x, self.num_classes, self.one_hot_y, 
-                                                                              network=self.network, network_args=self.network_args, 
-                                                                              rate=self.rate)        
-    
-    
-    def initEvalPipeline(self):        
+        ret = ModelTrainer.InitTrainPipeline(self.x, self.num_classes, self.one_hot_y, rate=self.rate,
+                                             network=self.network, network_args=self.network_args)
+        self.logits, self.training_operation, self.loss_operation, self.train_feed, self.eval_feed = ret
+
+    def initEvalPipeline(self):
         cp, ac, sv = ModelTrainer.InitEvalPipeline(self.logits, self.one_hot_y)
         self.correct_prediction, self.accuracy_operation, self.saver = cp, ac, sv
         
         
-    def evaluate(self, X_data, y_data):
-        return ModelTrainer.Evaluate(X_data, y_data, self.x, self.y, self.accuracy_operation, self.BATCH_SIZE)
+    def evaluate(self, sess, X_data, y_data):
+        return ModelTrainer.Evaluate(sess, X_data, y_data, self.x, self.y, self.accuracy_operation, self.eval_feed, BATCH_SIZE=self.BATCH_SIZE)
 
-        
-    def train(self, dirname='./', pre_ops=[], return_stats=True, stat_freq=50, rfunc=None):
+
+    def calcLoss(self, sess, X_data, y_data):
+        return ModelTrainer.CalcLoss(sess, X_data, y_data, self.x, self.y, self.loss_operation, self.eval_feed, BATCH_SIZE=self.BATCH_SIZE)
+
+
+    def calcAccAndLoss(self, sess, X_data, y_data):
+        return self.evaluate(sess, X_data, y_data), self.calcLoss(sess, X_data, y_data)
+
+
+    def progressString(pcent, space=50):
+        bar = '[{:' + str(space) + '}]'
+        msg = "{} {:1.2f}".format(bar.format("#"*np.int(space * pcent)), pcent)
+        return msg
+    
+    
+    def progressPrint( epoch, valid, train=None, loss=None):
+        msg = "Ep {:3} | Val {}".format(epoch, valid)
+        if (train is not None): msg += " | Train {}".format(train)
+        if (loss  is not None): msg += " | Loss {}".format(loss)
+        sys.stdout.write("\r" + msg)
+        sys.stdout.flush()        
+    
+    
+    def train(self, dirname='./', pre_ops=[], stat_freq=30, rfunc=None):
         if (os.path.isdir(dirname) == False): os.makedirs(dirname)
         dirname = Utils.find_an_empty_dir(dirname)
         os.mkdir(dirname)
@@ -320,6 +327,11 @@ class ModelTrainer:
         run_incomplete = True
         stats = []
 
+        print("TrainFeed = " + str(self.train_feed))
+        print("EvalFeed  = " + str(self.eval_feed))
+        
+        msg = lambda pcent, sp=30: ModelTrainer.progressString(pcent, space=sp)
+        bar = lambda ep, valid, t=None, l=None: ModelTrainer.progressPrint(ep, valid, train=t, loss=l)
         try:            
             with tf.Session() as sess:
                 print("Training...")
@@ -329,29 +341,34 @@ class ModelTrainer:
                 sess.run(tf.global_variables_initializer())
                 num_examples = len(self.X_train)
                 validation_accuracy = 0
+                
                 for i in range(self.EPOCHS):
+                    tot_acc, tot_loss, tot_n = 0,0,0
                     self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
                     for n, offset in enumerate(range(0, num_examples, self.BATCH_SIZE)):
                         end = offset + self.BATCH_SIZE
                         batch_x, batch_y = self.X_train[offset:end], self.y_train[offset:end]
-                        sess.run(self.training_operation, feed_dict={self.x: batch_x, self.y: batch_y})
+                        feed_dict = {self.x: batch_x, self.y: batch_y}
+                        feed_dict.update(self.train_feed)
+
                         if (n % stat_freq == (stat_freq-1)):
-                            t_indx = random.sample(range(0,offset), 30)
-                            tmp_x, tmp_y = self.X_train[t_indx], self.y_train[t_indx]
-                            train_acc = self.evaluate(tmp_x, tmp_y)
-                            stats.append([validation_accuracy, n, train_acc, i])
-#                            if (rfunc is not None): rfuncArgs = rfunc(rfuncArgs, stats)                            
-                            if (rfunc is not None): rfunc(stats)                            
-                            print("{:5d}. Training Accuracy = {:.3f}".format(n, train_acc))                    
+                            train_acc, loss_r = self.calcAccAndLoss(sess, batch_x, batch_y)
+                            bar(i, msg(validation_accuracy,sp=20), t=msg(train_acc,sp=20), l=msg(loss_r,sp=20))
+                            stats.append([validation_accuracy, n, train_acc, i, loss_r])
+                            tot_acc, tot_loss, tot_n = tot_acc+train_acc, tot_loss+loss_r, tot_n + 1
+                            if (rfunc is not None): rfunc(stats)
+
+
+                        sess.run(self.training_operation, feed_dict=feed_dict)
+
                     self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
-                    validation_accuracy = self.evaluate(self.X_test, self.y_test)
-                    print("EPOCH {:2} ...".format(i+1))
-                    print("Validation Accuracy = {:.3f}".format(validation_accuracy))
-                    print()                
-    
-                    fid.write("EPOCH {:2} ...".format(i+1))
-                    fid.write("Validation Accuracy = {:.3f}".format(validation_accuracy))
-                    fid.write('\n')                
+                    validation_accuracy = self.evaluate(sess, self.X_test, self.y_test)
+                    bar(i, msg(validation_accuracy,sp=20), t=msg(tot_acc/tot_n,sp=20), l=msg(tot_loss/tot_n,sp=20))
+                    print()
+
+#                    fid.write("EPOCH {:2} ...".format(i+1))
+#                    fid.write("Validation Accuracy = {:.3f}".format(validation_accuracy))
+#                    fid.write('\n')                
                     
                 self.saver.save(sess, outpath)
                 print("Model saved : " + outpath)
@@ -359,16 +376,17 @@ class ModelTrainer:
             fid.close()
         finally:
             if (run_incomplete): shutil.rmtree(dirname)
-            if (return_stats): return stats
+
+        return stats
 
 
     def InitTrainPipeline(x, num_classes, one_hot_y, network=(LeNet), network_args={}, rate=0.001):
-        logits = network(x, num_classes, **network_args)
+        logits, train_feed, eval_feed = network(x, num_classes, **network_args)
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=one_hot_y)
         loss_operation = tf.reduce_mean(cross_entropy)
         optimizer = tf.train.AdamOptimizer(learning_rate=rate)
         training_operation = optimizer.minimize(loss_operation)
-        return (logits, training_operation)
+        return (logits, training_operation, loss_operation, train_feed, eval_feed)
             
     
     def InitEvalPipeline(logits, one_hot_y):
@@ -377,17 +395,31 @@ class ModelTrainer:
         saver = tf.train.Saver()
         return correct_prediction, accuracy_operation, saver       
 
-
-    def Evaluate(X_data, y_data, x, y, accuracy_operation, BATCH_SIZE=128):
-        num_examples = len(X_data)
+    def Evaluate(sess, x_data, y_data, x, y, accuracy_operation, eval_feed={}, BATCH_SIZE=128):
+        num_examples = len(x_data)
         total_accuracy = 0
-        sess = tf.get_default_session()
         for offset in range(0, num_examples, BATCH_SIZE):
-            batch_x, batch_y = X_data[offset:offset+BATCH_SIZE], y_data[offset:offset+BATCH_SIZE]
-            accuracy = sess.run(accuracy_operation, feed_dict={x: batch_x, y: batch_y})
+            batch_x, batch_y = x_data[offset:offset+BATCH_SIZE], y_data[offset:offset+BATCH_SIZE]
+            feed_dict={x: batch_x, y: batch_y}
+            feed_dict.update(eval_feed)
+            accuracy = sess.run(accuracy_operation, feed_dict=feed_dict)
             total_accuracy += (accuracy * len(batch_x))
         return total_accuracy / num_examples
                 
+
+    def CalcLoss(sess, x_data, y_data, x, y, loss_op, eval_feed={}, BATCH_SIZE=128):
+        num_examples = len(x_data)
+        total_loss = 0
+        for offset in range(0, num_examples, BATCH_SIZE):
+            batch_x, batch_y = x_data[offset:offset+BATCH_SIZE], y_data[offset:offset+BATCH_SIZE]
+            feed_dict={x: batch_x, y: batch_y}
+            feed_dict.update(eval_feed)
+            loss = sess.run(loss_op, feed_dict=feed_dict)
+            total_loss += (loss * len(batch_x))
+        return loss / num_examples
+                
+
+
 
 class Utils:    
 
