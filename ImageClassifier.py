@@ -207,6 +207,7 @@ class ModelTrainer:
 
         Layer = 2       # Flatten. Input = 5x5x16. Output = 400.
         fc0 = flatten(pool2)
+        if (Layer in dropouts): fc0 = ModelTrainer.addDropOut(fc0, dropouts[Layer], train_feed, eval_feed)
 
         Layer = 3       # Layer 3: Fully Connected. Input = 400. Output = 120.
         fc1 = ModelTrainer.fully_connected(fc0, 120, mu, sigma)
@@ -310,9 +311,9 @@ class ModelTrainer:
     
     
     def progressPrint( epoch, valid, train=None, loss=None):
-        msg = "Ep {:3} | Val {}".format(epoch, valid)
-        if (train is not None): msg += " | Train {}".format(train)
-        if (loss  is not None): msg += " | Loss {}".format(loss)
+        msg = "{:3} | V {}".format(epoch, valid)
+        if (train is not None): msg += " | T {}".format(train)
+        if (loss  is not None): msg += " | L {}".format(loss)
         sys.stdout.write("\r" + msg)
         sys.stdout.flush()        
     
@@ -353,7 +354,7 @@ class ModelTrainer:
 
                         if (n % stat_freq == (stat_freq-1)):
                             train_acc, loss_r = self.calcAccAndLoss(sess, batch_x, batch_y)
-                            bar(i, msg(validation_accuracy,sp=20), t=msg(train_acc,sp=20), l=msg(loss_r,sp=20))
+                            bar(i, msg(validation_accuracy,sp=20), t=msg(train_acc,sp=20), l=msg(100*loss_r,sp=30))
                             stats.append([validation_accuracy, n, train_acc, i, loss_r])
                             tot_acc, tot_loss, tot_n = tot_acc+train_acc, tot_loss+loss_r, tot_n + 1
                             if (rfunc is not None): rfunc(stats)
@@ -363,7 +364,7 @@ class ModelTrainer:
 
                     self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
                     validation_accuracy = self.evaluate(sess, self.X_test, self.y_test)
-                    bar(i, msg(validation_accuracy,sp=20), t=msg(tot_acc/tot_n,sp=20), l=msg(tot_loss/tot_n,sp=20))
+                    bar(i, msg(validation_accuracy,sp=20), t=msg(tot_acc/tot_n,sp=20), l=msg(100*(tot_loss/tot_n),sp=30))
                     print()
 
 #                    fid.write("EPOCH {:2} ...".format(i+1))
