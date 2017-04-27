@@ -19,25 +19,33 @@ class Layer(object):
     def __init__(self, ltype, inLayer, name=None):
         self.__inLayer = inLayer 
         self.__layerType = ltype
-        self.__name = name
+        self.__name = name if name is not None else ltype
         self.__nextLayer = None
         self.__tensor = None
+        self.__layerContainer = None
         if (self.inLayer() is not None): self.inLayer().setNextLayer(self)
 
-    def inLayer(self):      return self.__inLayer
-    def inTensor(self):     return self.inLayer().tensor()
+    def __str__(self):      return self.name()
+    def name(self):         return self.__name
+    def tensor(self):       return self.__tensor
     def inSize(self):       return self.inTensor().get_shape().as_list()
     def outSize(self):      return self.tensor().get_shape().as_list()
-    def tensor(self):       return self.__tensor
+    def inLayer(self):      return self.__inLayer
+    def inTensor(self):     return self.inLayer().tensor()
     def layerType(self):    return self.__layerType
-    def name(self):         return self.__name
     def nextLayer(self):    return self.__nextLayer
+    def getGroup(self):     return self.__layerContainer    
     
     def setNextLayer(self, layer):  self.__nextLayer = layer
     def setTensor(self, tensor):    self.__tensor = tensor
+    def setGroup(self, group):      self.__layerContainer = group
+
+    def setInLayer(self, layer): 
+        self.__inLayer = layer
+        self.createLayer()
+        self.updateLayer()
 
     def updateLayer(self): 
-        self.createLayer()
         print("update layer: name: {:20} | type: {:20}".format(self.tensor().name, self.layerType()))
         if self.nextLayer() is not None: self.nextLayer().updateLayer()            
 
@@ -69,29 +77,6 @@ class BranchOutLayer(Layer):
     def nextLayer(self): return [self.__next_layers[i] for i in self.__next_layers]
 
     
-#class BranchInLayer(Layer):
-#        
-#    def __init__(self, inLayers, name=None):
-#        self.__inLayer = None 
-#        self.__name = name
-#        self.__nextLayer = None
-#        self.__tensor = None
-#        if (self.inLayer() is not None): self.inLayer().setNextLayer(self)
-#
-#    def tensor(self): return self.inTensor()
-#
-#    def setNextLayer(self, layer):  
-#        if hash(layer) not in self.__next_layers.keys():
-#            self.__next_layers[hash(layer)] = layer
-#
-#    def updateLayer(self): 
-#        for k in self.__next_layers:  
-#            layer = self.__next_layers[k]
-#            layer.updateLayer()            
-#            
-#    def nextLayer(self): return [self.__next_layers[i] for i in self.__next_layers]
-
-            
 class ConvLayerBase(Layer):
         
     def __init__(self, layerType, inLayer, kSize, strides, padding, name=None):
@@ -202,8 +187,8 @@ class InputLayer(Layer):
     def inSize(self):      return self.inTensor().get_shape().as_list()
     def outSize(self):     return self.tensor().get_shape().as_list()
     def createLayer(self): return self.tensor()
-    def setInputTensor(self, tensor): 
-        self.setTensor(tensor)
+    def setTensor(self, tensor): 
+        self.__tensor = tensor
         self.updateLayer()
         
         
@@ -223,12 +208,63 @@ def FlattenLayer(inLayer, name=None, args={}):
     return BasicLayer('flatten', inLayer, flatten, name=name, func_args=args)
                 
 
+class GroupLayer(Layer):
+    
+    layerType = "GroupLayer"
+    
+    def __init__(self, layers, name=None): 
+        if layers is None: raise Exception("None layers")
+        if False == hasattr(layers, '__iter__'): layers = [layers] 
+        self.__layers = layers
+        self.__firstLayer = layers[0]
+        self.__lastLayer  = layers[-1] 
+        self.__groupName  = name if name is not None else GroupLayer.layerType
+        for i in layers: i.setGroup(self)
 
-#%%
+    def __getitem__(self, key):  return self.__layers[key]
+    def __len__(self):           return len(self.__layers)
+    def __str__(self):           return "{}: {}".format(Layer.__str__(self),[i.name() for i in self.__layers])
+    def length(self):            return len(self)
+    
+    
+    def inLayer(self):      return self.__firstLayer.inLayer()
+    def inTensor(self):     return self.inLayer().tensor()
+    def inSize(self):       return self.inTensor().get_shape().as_list()
+    def outSize(self):      return self.tensor().get_shape().as_list()
+    def tensor(self):       return self.__lastLayer.tensor()
+    def layerType(self):    return GroupLayer.layerType
+    def name(self):         return self.__groupName
+    def nextLayer(self):    return self.__lastLayer.nextLayer()
+    def setNextLayer(self, layer): self.__lastLayer.setNextLayer(layer)
+    def setTensor(self, tensor):   self.__lastLayer.setTensor(tensor)
+    def updateLayer(self):         self.__firstLayer.updateLayer()
+        
+    def createLayer(self):          raise NotImplementedError('{} needs to implement method'.format(self.layerType()))
+    def insertLayer(self, layer):   raise NotImplementedError('{} needs to implement method'.format(self.layerType()))
+    def swapLayer(self, layer):     raise NotImplementedError('{} needs to implement method'.format(self.layerType()))       
+    def addLayer(self, layer):      raise NotImplementedError('{} needs to implement method'.format(self.layerType())) 
+    def removeLayer(self):          raise NotImplementedError('{} needs to implement method'.format(self.layerType()))
 
+    def CreateGroup(layer, n=100, name=None):
+        layers = []
+        for i in range(n):
+            if layer is not None:
+                layers.insert(0, layer)
+                layer = layer.inLayer()
+            else: 
+                break
+        return GroupLayer(layers, name=name)
+    
+    def print(group):
+        for i, l in enumerate(group):
+            lStr = "{:20} in:{:20}, out:{:20} {}".format(l.name(), str(l.inSize()), str(l.outSize()), str(l))
+            print("Layer {:2d} : {}".format(i, lStr))
+            
 class ConvParams:    
     def __init__(self, K=[1,1,1,1], S=[1,1,1,1], P='VALID'):
         self.K, self.S, self.P = K,S,P
+
+
 
 def ConvReluPoolLayer(prev, convP=None, poolP=None, suffix='', mu=0.0, sigma=1.0):
     r = ()
@@ -242,43 +278,28 @@ def ConvReluPoolLayer(prev, convP=None, poolP=None, suffix='', mu=0.0, sigma=1.0
         prev = PoolLayer('max', prev, name='maxpool_'+suffix, kSize=poolP.K, strides=poolP.S, padding=poolP.P)
         r = r + (prev,)
         
-    return r
+    return GroupLayer(r, "ConvReluPool"+suffix)
+
 
 #%%
 
 
-def DeeperLeNet(x, num_classes, mu=0.0, sigma=1.0):
-    L  = [ InputLayer(x) ]
-    L += [ ConvReluPoolLayer(L[-1], suffix='1_0', convP=ConvParams(K=[1,5,5,15], S=[1,1,1,1], P='SAME'), mu=mu, sigma=sigma)[-1] ]
-    L += [ ConvReluPoolLayer(L[-1], suffix='2_0', convP=ConvParams(K=[1,5,5,10], S=[1,1,1,1], P='SAME'), mu=mu, sigma=sigma)[-1] ]
-    L += [ ConvReluPoolLayer(L[-1], suffix='3_0', convP=ConvParams(K=[1,5,5, 6], S=[1,1,1,1], P='VALID'), poolP=ConvParams(K=[1,2,2,1], S=[1,2,2,1], P='VALID'), mu=mu, sigma=sigma)[-1] ]
-    L += [ ConvReluPoolLayer(L[-1], suffix='4_0', convP=ConvParams(K=[1,5,5,16], S=[1,1,1,1], P='VALID'), poolP=ConvParams(K=[1,2,2,1], S=[1,2,2,1], P='VALID'), mu=mu, sigma=sigma)[-1] ]
-    L += [ FlattenLayer(L[-1]) ]
-    L += [ ActivationLayer('relu', FullyConnectedLayer(L[-1], 120, name='fc_4_0', mu=mu, sigma=sigma), name='fc_4_0_relu') ]
-    L += [ ActivationLayer('relu', FullyConnectedLayer(L[-1],  84, name='fc_5_0', mu=mu, sigma=sigma), name='fc_5_0_relu') ]
-    L += [ FullyConnectedLayer(L[-1],  num_classes, name='fc_6_0', mu=mu, sigma=sigma) ] 
-    return L[-1].tensor()
-
-def CreateLeNet(x, num_classes, mu=0.0, sigma=1.0):
-    xL = InputLayer(x)    
-    L1 = ConvReluPoolLayer(xL,     suffix='1_0', convP=ConvParams(K=[1,5,5,6],  S=[1,1,1,1], P='VALID'), poolP=ConvParams(K=[1,2,2,1], S=[1,2,2,1], P='VALID'), mu=mu, sigma=sigma)
-    L2 = ConvReluPoolLayer(L1[-1], suffix='2_0', convP=ConvParams(K=[1,5,5,16], S=[1,1,1,1], P='VALID'), poolP=ConvParams(K=[1,2,2,1], S=[1,2,2,1], P='VALID'), mu=mu, sigma=sigma)
-    L3 = FlattenLayer(L2[-1])
-    L4 = ActivationLayer('relu', FullyConnectedLayer(L3, 120, name='fc_4_0', mu=mu, sigma=sigma), name='fc_4_0_relu')
-    L5 = ActivationLayer('relu', FullyConnectedLayer(L4,  84, name='fc_5_0', mu=mu, sigma=sigma), name='fc_5_0_relu')
-    L6 = FullyConnectedLayer(L5,  num_classes, name='fc_6_0', mu=mu, sigma=sigma)
-    return L6.tensor()
-
-
 if __name__ == '__main__':
-    print('main loop')
-    num_classes = 43
+    print('ConvNet main loop')
     x  = tf.placeholder(tf.float32, (None, 32, 32, 3))
-    LNet= DeeperLeNet(x, num_classes)
-
-#    L4 = 
-#    xL = InputLayer(x)
-#    cL = ConvLayer(xL, kSize=[1,5,5,15], strides=[1,1,1,1], padding='VALID', name='conv1')
-#    rL = ActivationLayer('relu', cL)
-#    pL = PoolLayer('max', rL, kSize=[1, 2, 2, 1], strides=[1, 2, 2, 1])
+    num_classes = 43
+    mu, sigma = 0.1, 0.1
+    
+    Group = lambda layer=None, n=100, name=None: GroupLayer.CreateGroup(layer,name=name, n=n)
+    
+    L = InputLayer(x)
+    L = ConvReluPoolLayer(L, suffix='1_0', convP=ConvParams(K=[1,5,5,6],  S=[1,1,1,1], P='VALID'), poolP=ConvParams(K=[1,2,2,1], S=[1,2,2,1], P='VALID'), mu=mu, sigma=sigma)
+    L = ConvReluPoolLayer(L, suffix='2_0', convP=ConvParams(K=[1,5,5,16], S=[1,1,1,1], P='VALID'), poolP=ConvParams(K=[1,2,2,1], S=[1,2,2,1], P='VALID'), mu=mu, sigma=sigma)
+    L = FlattenLayer(L)
+    L = Group(name='FC4', n=2, layer=ActivationLayer('relu', FullyConnectedLayer(L, 120, name='fc_4_0', mu=mu, sigma=sigma), name='fc_4_0_relu'))
+    L = Group(name='FC5', n=2, layer=ActivationLayer('relu', FullyConnectedLayer(L,  84, name='fc_5_0', mu=mu, sigma=sigma), name='fc_5_0_relu'))
+    L = FullyConnectedLayer(L,  num_classes, name='FC6', mu=mu, sigma=sigma)
+    
+    G = GroupLayer.CreateGroup(L, name='LeNet')
+    GroupLayer.print(G)
     
